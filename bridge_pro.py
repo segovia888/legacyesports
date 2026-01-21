@@ -3,6 +3,8 @@ import requests
 import irsdk
 import math
 import traceback
+import pickle
+import os
 
 URL_DESTINO = "http://127.0.0.1:5000/api/telemetry/ingest" 
 AVG_PIT_LOSS = 50.0 
@@ -60,33 +62,72 @@ def get_brand_logo(car_name_raw):
     return "iracing"
 
 # LÓGICA DE STINTS
+
+# Ruta para guardar el estado de los stints y su historial
+STATE_FILE = "stint_state.pkl"
+
+def save_state(state):
+    """
+    Guarda en disco el momento de inicio del stint actual y el historial de stints para cada coche.
+    Esto permite que, si se reinicia el bridge durante una carrera, se puedan restaurar las vueltas ya completadas.
+    """
+    try:
+        with open(STATE_FILE, "wb") as f:
+            pickle.dump({
+                "current_stint_start": state.current_stint_start,
+                "stint_history": state.stint_history
+            }, f)
+    except Exception as e:
+        print(f"⚠️ Error al guardar estado: {e}")
+
+def load_state(state):
+    """
+    Carga de disco la información del stint actual y el historial de stints para cada coche.
+    Si no existe el fichero, no modifica el estado.
+    """
+    try:
+        if os.path.exists(STATE_FILE):
+            with open(STATE_FILE, "rb") as f:
+                data = pickle.load(f)
+                state.current_stint_start = data.get("current_stint_start", {})
+                state.stint_history   = data.get("stint_history", {})
+    except Exception as e:
+        print(f"⚠️ Error al cargar estado: {e}")
+
 def process_stints(ir, state):
     try:
         on_pit = ir['CarIdxOnPitRoad']
         laps = ir['CarIdxLapCompleted']
-        if not on_pit or not laps: return
+        if not on_pit or not laps:
+            return
 
         for i in range(len(on_pit)):
             if i not in state.current_stint_start:
                 state.current_stint_start[i] = safe_int(laps[i])
                 state.stint_history[i] = []
-            
+
             is_in_pit_mem = state.current_stint_start.get(f"in_pit_{i}", False)
             curr_lap = safe_int(laps[i])
-            
-            # Entra
+
+            # Entra (fin de un stint)
             if on_pit[i] and not is_in_pit_mem:
                 stint_len = curr_lap - state.current_stint_start[i]
-                if stint_len > 3: 
+                if stint_len > 3:
                     state.stint_history[i].append(stint_len)
-                    if len(state.stint_history[i]) > 5: state.stint_history[i].pop(0)
+                    if len(state.stint_history[i]) > 5:
+                        state.stint_history[i].pop(0)
                 state.current_stint_start[f"in_pit_{i}"] = True
-            
-            # Sale
+                # Guardamos el estado al entrar en boxes
+                save_state(state)
+
+            # Sale (inicio de un stint)
             if not on_pit[i] and is_in_pit_mem:
                 state.current_stint_start[i] = curr_lap
                 state.current_stint_start[f"in_pit_{i}"] = False
-    except: pass
+                # Guardamos el estado al salir de boxes
+                save_state(state)
+    except:
+        pass
 
 def calculate_stops_remaining(laps_done, total_laps, avg_stint):
     if avg_stint <= 0: return 0
@@ -249,28 +290,42 @@ def loop(ir, state):
                         strat_txt = "EQUAL"
 
                 # STINTS FORMATO TEXTO
+                # Calculamos las vueltas del stint actual (ST‑1) y recuperamos el historial de stints completados.
                 curr_stint_lap = safe_int(ir['CarIdxLapCompleted'][idx]) - state.current_stint_start.get(idx, 0)
                 hist = state.stint_history.get(idx, [])
-                s1 = str(hist[0]) if len(hist) > 0 else "-"
-                s2 = str(hist[1]) if len(hist) > 1 else "-"
-                
+
+                # Tomamos los dos stints anteriores del historial (el último y el penúltimo).
+                prev = hist[-1] if len(hist) >= 1 else "-"
+                prevprev = hist[-2] if len(hist) >= 2 else "-"
+
+                # Asignamos ST‑1 al stint actual, ST‑2 al anterior y ST‑3 al penúltimo.
+                s1 = str(curr_stint_lap)
+                s2 = str(prev) if prev != "-" else "-"
+                s3 = str(prevprev) if prevprev != "-" else "-"
+
+                # Imagen de marca del vehículo.
                 car_logo = get_brand_logo(d.get('CarScreenName', ''))
 
+                # Añadimos la información del piloto a la tabla de datos.
                 drivers_data.append({
-                    "pos": pos, 
-                    "name": str(d['UserName']), 
+                    "pos": pos,
+                    "name": str(d['UserName']),
                     "num": str(d['CarNumberRaw']),
-                    "is_me": (idx == my_idx), 
-                    "c_name": "GT3", 
-                    "car_logo": car_logo, 
+                    "is_me": (idx == my_idx),
+                    "c_name": "GT3",
+                    "car_logo": car_logo,
                     "flag": "es",
-                    "last_lap": format_time(raw_last), 
+                    "last_lap": format_time(raw_last),
                     "best_lap": format_time(raw_best),
-                    "gap": str(display_gap), 
+                    "gap": str(display_gap),
                     "sort_val": float(sort_value),
-                    "s1": s1, "s2": s2, "s3": str(curr_stint_lap),
-                    "strat_txt": strat_txt, "strat_cls": strat_cls
+                    "s1": s1,
+                    "s2": s2,
+                    "s3": s3,
+                    "strat_txt": strat_txt,
+                    "strat_cls": strat_cls
                 })
+
 
             # ORDENAR
             if is_race: drivers_data.sort(key=lambda x: x['pos'])
@@ -315,10 +370,13 @@ def loop(ir, state):
 if __name__ == '__main__':
     ir = irsdk.IRSDK()
     state = State()
-    print("--- BRIDGE V27 (SAFE MODE) ---")
+    # Restaura el historial de stints y el inicio del stint actual si existe
+    load_state(state)
+    print("--- BRIDGE V28 ---")
     try:
         while True:
             check_iracing(ir, state)
             loop(ir, state)
-            time.sleep(0.5) 
-    except: print("\n🛑 Fin.")
+            time.sleep(0.5)
+    except:
+        print("\n🛑 Fin.")

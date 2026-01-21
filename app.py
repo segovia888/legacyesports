@@ -528,9 +528,21 @@ def service_worker(): return send_from_directory('static', 'sw.js')
 telemetry_data = {"connected": False, "laps": 0, "fuel": 0, "driver": "", "flag": "green", "timestamp": 0}
 @app.route('/api/telemetry/ingest', methods=['POST'])
 def ingest_telemetry():
+    """
+    Guarda la telemetría enviada por el bridge y marca la hora de la última actualización.
+    Si no actualizamos timestamp, el live timing se declara desconectado en cuanto se consulta.
+    """
     global telemetry_data
-    try: data = request.json; telemetry_data.update(data); telemetry_data["connected"] = True; return jsonify({"status": "ok"})
-    except Exception as e: return jsonify({"status": "error", "message": str(e)}), 500
+    try:
+        data = request.json or {}
+        telemetry_data.update(data)
+        telemetry_data["connected"] = True
+        # Registrar la hora de llegada de datos
+        telemetry_data["timestamp"] = time.time()
+        return jsonify({"status": "ok"})
+    except Exception as e:
+        return jsonify({"status": "error", "message": str(e)}), 500
+
 @app.route('/api/telemetry/live', methods=['GET'])
 def get_live_telemetry():
     if time.time() - telemetry_data.get("timestamp", 0) > 5: telemetry_data["connected"] = False
@@ -610,13 +622,14 @@ telemetry_data = {"connected": False, "timestamp": 0}
 def ingest_telemetry():
     global telemetry_data
     try:
-        data = request.json
+        data = request.json or {}
         telemetry_data.update(data)
         telemetry_data["connected"] = True
-        telemetry_data["timestamp"] = time.time()
+        telemetry_data["timestamp"] = time.time()  # registra la hora de la última actualización
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
+
 
 @app.route('/api/telemetry/live', methods=['GET'])
 def get_live_telemetry():
