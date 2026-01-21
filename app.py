@@ -622,14 +622,13 @@ telemetry_data = {"connected": False, "timestamp": 0}
 def ingest_telemetry():
     global telemetry_data
     try:
-        data = request.json or {}
+        data = request.json or {}       # recogemos el JSON o un dict vacío
         telemetry_data.update(data)
         telemetry_data["connected"] = True
-        telemetry_data["timestamp"] = time.time()  # registra la hora de la última actualización
+        telemetry_data["timestamp"] = time.time()
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 
 @app.route('/api/telemetry/live', methods=['GET'])
 def get_live_telemetry():
@@ -675,10 +674,13 @@ if __name__ == '__main__':
             check_iracing(ir, state)
             loop(ir, state)
             time.sleep(1)
-    except KeyboardInterrupt: pass
+except KeyboardInterrupt:
+    pass
 '''
     from flask import Response
-    return Response(bridge_code, mimetype='text/x-python', headers={'Content-Disposition': 'attachment;filename=legacy_bridge.py'})
+    return Response(bridge_code, mimetype='text/x-python',
+                    headers={'Content-Disposition': 'attachment;filename=legacy_bridge.py'})
+
 
 if __name__ == "__main__":
     app.run(debug=False, host='0.0.0.0', port=5000)
