@@ -424,75 +424,51 @@ def loop(ir, state):
                     if is_race: drivers_data[i]["int"] = f"+{val:.1f}"
                     else: drivers_data[i]["int"] = f"+{val:.3f}" if val < 5000 else "--"
 
-            # CLIMA
+            # CLIMA + SESIÓN + CIRCUITO
             air_temp = safe_float(ir['AirTemp'])
             track_temp = safe_float(ir['TrackTempCrew'])
+
             # Truco para detectar lluvia si iRacing no da el dato directo
-            # Si la pista está muy fría o húmeda (simulado con AirDensity aquí como placeholder)
-            rain_val = "0" 
+            # (placeholder)
+            rain_val = "0"
 
-# --- SESIÓN Y CIRCUITO ---
-session_type = "-"
-track_name = "-"
+            # Sesión (Race / Practice / Qualy) y nombre del circuito
+            session_type = "-"
+            track_name = "-"
 
-try:
-    sess_num = safe_int(ir['SessionNum'])
-    sessions = ir['SessionInfo'].get('Sessions', [])
-    if sessions and 0 <= sess_num < len(sessions):
-        session_type = sessions[sess_num].get('SessionType') or sessions[sess_num].get('SessionName') or "-"
-except:
-    pass
+            try:
+                sess_num = safe_int(ir['SessionNum'])
+                sess = ir['SessionInfo']['Sessions'][sess_num]
+                raw = str(sess.get('SessionType') or sess.get('SessionName') or "-")
+                r = raw.lower()
+                if r.startswith("qual"):
+                    session_type = "QUALY"
+                elif r.startswith("prac"):
+                    session_type = "PRACTICE"
+                elif r.startswith("race"):
+                    session_type = "RACE"
+                elif r.startswith("warm"):
+                    session_type = "WARMUP"
+                else:
+                    session_type = raw.upper()
+            except Exception:
+                pass
 
-# Normalizamos a lo que quieres ver (Race / Practice / Qualy)
-st = (session_type or "").lower()
-if st.startswith("qual"):
-    session_type = "QUALY"
-elif st.startswith("prac"):
-    session_type = "PRACTICE"
-elif st.startswith("race"):
-    session_type = "RACE"
-elif st.startswith("warm"):
-    session_type = "WARMUP"
-else:
-    session_type = session_type.upper() if session_type else "-"
+            try:
+                wk = ir['SessionInfo'].get('WeekendInfo', {})
+                track_name = str(wk.get('TrackDisplayName') or wk.get('TrackName') or "-")
+            except Exception:
+                pass
 
-try:
-    wi = ir['SessionInfo'].get('WeekendInfo', {})
-    track_name = wi.get('TrackDisplayName') or wi.get('TrackName') or "-"
-except:
-    pass
-
-            
-            # --- SESIÓN Y CIRCUITO ---
-session_type = "-"
-track_name = "-"
-
-try:
-    sess_num = safe_int(ir['SessionNum'])
-    sessions = ir['SessionInfo'].get('Sessions', [])
-    if sessions and 0 <= sess_num < len(sessions):
-        session_type = sessions[sess_num].get('SessionType') or sessions[sess_num].get('SessionName') or "-"
-except:
-    pass
-
-# Normalizamos a lo que quieres ver (Race / Practice / Qualy)
-st = (session_type or "").lower()
-if st.startswith("qual"):
-    session_type = "QUALY"
-elif st.startswith("prac"):
-    session_type = "PRACTICE"
-elif st.startswith("race"):
-    session_type = "RACE"
-elif st.startswith("warm"):
-    session_type = "WARMUP"
-else:
-    session_type = session_type.upper() if session_type else "-"
-
-try:
-    wi = ir['SessionInfo'].get('WeekendInfo', {})
-    track_name = wi.get('TrackDisplayName') or wi.get('TrackName') or "-"
-except:
-    pass
+            payload = {
+                "drivers": drivers_data,
+                "air": air_temp,
+                "track": track_temp,
+                "rain": rain_val,
+                "session_type": session_type,
+                "track_name": track_name,
+                "timestamp": time.time()
+            }
 
             
             # ENVÍO
