@@ -103,8 +103,11 @@ def process_stints(ir, state):
 
         for i in range(len(on_pit)):
             if i not in state.current_stint_start:
+                # Primera vez que vemos este coche: inicializamos el inicio del stint y el historial
                 state.current_stint_start[i] = safe_int(laps[i])
                 state.stint_history[i] = []
+                # Guardamos el estado inicial para poder restaurarlo tras un reinicio
+                save_state(state)
 
             is_in_pit_mem = state.current_stint_start.get(f"in_pit_{i}", False)
             curr_lap = safe_int(laps[i])

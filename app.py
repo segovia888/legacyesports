@@ -529,20 +529,25 @@ telemetry_data = {"connected": False, "laps": 0, "fuel": 0, "driver": "", "flag"
 @app.route('/api/telemetry/ingest', methods=['POST'])
 def ingest_telemetry():
     """
-    Guarda la telemetría enviada por el bridge y marca la hora de la última actualización.
-    Si no actualizamos timestamp, el live timing se declara desconectado en cuanto se consulta.
+    Receive telemetry data from the bridge and update the server-side
+    telemetry_data dictionary. In addition to setting the connected flag,
+    store a timestamp of the last update so the live timing endpoint can
+    determine if the data is still fresh. Without updating the timestamp
+    the frontend would instantly mark the connection as lost because
+    timestamp would remain at its initial value of 0.
     """
     global telemetry_data
     try:
-        data = request.json or {}
-        telemetry_data.update(data)
+        data = request.json
+        # merge incoming payload into our telemetry store
+        telemetry_data.update(data or {})
         telemetry_data["connected"] = True
-        # Registrar la hora de llegada de datos
+        # record the current time as the last update to avoid immediate
+        # disconnection in /api/telemetry/live
         telemetry_data["timestamp"] = time.time()
         return jsonify({"status": "ok"})
     except Exception as e:
         return jsonify({"status": "error", "message": str(e)}), 500
-
 @app.route('/api/telemetry/live', methods=['GET'])
 def get_live_telemetry():
     if time.time() - telemetry_data.get("timestamp", 0) > 5: telemetry_data["connected"] = False
@@ -609,43 +614,44 @@ def loop(ir, state):
             }}
             requests.post(SERVER_URL, json=payload, timeout=1)
             # print(f"📡 Enviado: {{d_name}} ({{fuel:.1f}}L)")
-        except Exception: pass
+
+        except Exception:
+            # Cualquier error durante la generación del payload del bridge
+            # no debería detener el bucle principal del cliente.
+            pass
+
+        # ----------------------------
+        # Código de ejecución del bridge cuando se ejecuta como script independiente.
+        # Esto permite que el archivo generado funcione como cliente stand‑alone.
+        if __name__ == '__main__':
+            ir = irsdk.IRSDK()
+            state = State()
+            print("--- LEGACY BRIDGE CLIENT ---")
+            print(f"🌍 Conectando a: {SERVER_URL}")
+            print("Esperando a iRacing...")
+            try:
+                while True:
+                    check_iracing(ir, state)
+                    loop(ir, state)
+                    time.sleep(1)
+            except KeyboardInterrupt:
+                pass
+
+    '''  # Cierre de la cadena f de bridge_code
+    from flask import Response
+    return Response(
+        bridge_code,
+        mimetype='text/x-python',
+        headers={'Content-Disposition': 'attachment;filename=legacy_bridge.py'}
+    )
 
 # ==========================================
 # BLOQUE LIVE TIMING & PWA (INSERTAR AQUÍ)
 # ==========================================
 
-# Variables globales para la telemetría
-telemetry_data = {"connected": False, "timestamp": 0}
-
-@app.route('/api/telemetry/ingest', methods=['POST'])
-def ingest_telemetry():
-    global telemetry_data
-    try:
-        data = request.json or {}       # recogemos el JSON o un dict vacío
-        telemetry_data.update(data)
-        telemetry_data["connected"] = True
-        telemetry_data["timestamp"] = time.time()
-        return jsonify({"status": "ok"})
-    except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-
-@app.route('/api/telemetry/live', methods=['GET'])
-def get_live_telemetry():
-    global telemetry_data
-    # Si hace más de 5 segundos que no recibimos datos, marcamos como desconectado
-    if time.time() - telemetry_data.get("timestamp", 0) > 5:
-        telemetry_data["connected"] = False
-    return jsonify(telemetry_data)
-
-@app.route("/live-timing")
-@login_required
-def live_timing():
-    return render_template("live_timing.html")
-
 # Rutas para evitar el error 500 del Manifest
-@app.route('/manifest.json')
-def manifest():
+@app.route('/manifest.json', endpoint='manifest_json')
+def manifest_json():
     return jsonify({
         "short_name": "Legacy",
         "name": "Legacy eSports Club",
@@ -656,31 +662,12 @@ def manifest():
         "background_color": "#0a0a0a"
     })
 
-@app.route('/sw.js')
-def service_worker():
+@app.route('/sw.js', endpoint='service_worker_js')
+def service_worker_js():
     return app.send_static_file('js/sw.js') if os.path.exists('static/js/sw.js') else ("", 204)
 
 # ==========================================
 # FIN BLOQUE LIVE TIMING
 # ==========================================
-if __name__ == '__main__':
-    ir = irsdk.IRSDK()
-    state = State()
-    print("--- LEGACY BRIDGE CLIENT ---")
-    print(f"🌍 Conectando a: {{SERVER_URL}}")
-    print("Esperando a iRacing...")
-    try:
-        while True:
-            check_iracing(ir, state)
-            loop(ir, state)
-            time.sleep(1)
-except KeyboardInterrupt:
-    pass
-'''
-    from flask import Response
-    return Response(bridge_code, mimetype='text/x-python',
-                    headers={'Content-Disposition': 'attachment;filename=legacy_bridge.py'})
-
-
 if __name__ == "__main__":
     app.run(debug=False, host='0.0.0.0', port=5000)
