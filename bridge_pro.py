@@ -300,78 +300,76 @@ def loop(ir, state):
                         sort_value = raw_best
 
                 # ESTRATEGIA (PARADAS RESTANTES HASTA FINAL — referencia: tu coche)
-strat_txt = "-"
-strat_cls = "equal"
+                strat_txt = "-"
+                strat_cls = "equal"
 
-if is_race and idx != my_idx and total_laps_est and total_laps_est > 0:
-    # --------------------------
-    # 1) Referencia: TU coche
-    # --------------------------
-    my_lap = safe_int(ir['CarIdxLapCompleted'][my_idx])
-    my_laps_left = max(0, total_laps_est - my_lap)
+                if is_race and idx != my_idx and total_laps_est and total_laps_est > 0:
+                    # --------------------------
+                    # 1) Referencia: TU coche
+                    # --------------------------
+                    my_lap = safe_int(ir['CarIdxLapCompleted'][my_idx])
+                    my_laps_left = max(0, total_laps_est - my_lap)
 
-    # Preferimos modelo por combustible (más fiable)
-    my_full_stint = None
-    my_remaining_laps = None
+                    my_full_stint = None
+                    my_remaining_laps = None
 
-    my_fuel_per_lap = getattr(state, "my_fuel_per_lap", None)
-    my_tank_capacity = getattr(state, "my_tank_capacity", None)
-    my_fuel_level = safe_float(ir['FuelLevel'])
+                    my_fuel_per_lap = getattr(state, "my_fuel_per_lap", None)
+                    my_tank_capacity = getattr(state, "my_tank_capacity", None)
+                    my_fuel_level = safe_float(ir['FuelLevel'])
 
-    if my_fuel_per_lap is not None and my_fuel_per_lap > 0.0001:
-        my_remaining_laps = my_fuel_level / my_fuel_per_lap
-        if my_tank_capacity is not None and my_tank_capacity > 0:
-            my_full_stint = my_tank_capacity / my_fuel_per_lap
+                    if my_fuel_per_lap is not None and my_fuel_per_lap > 0.0001:
+                        my_remaining_laps = my_fuel_level / my_fuel_per_lap
+                        if my_tank_capacity is not None and my_tank_capacity > 0:
+                            my_full_stint = my_tank_capacity / my_fuel_per_lap
 
-    # Fallback si todavía no hay consumo suficiente
-    if my_full_stint is None or my_full_stint < 1:
-        my_hist = state.stint_history.get(my_idx, [])
-        my_full_stint = (sum(my_hist) / len(my_hist)) if len(my_hist) > 0 else 30.0
+                    # Fallback si todavía no hay consumo suficiente
+                    if my_full_stint is None or my_full_stint < 1:
+                        my_hist = state.stint_history.get(my_idx, [])
+                        my_full_stint = (sum(my_hist) / len(my_hist)) if len(my_hist) > 0 else 30.0
 
-        my_start = state.current_stint_start.get(my_idx, my_lap)
-        my_curr_stint = my_lap - my_start
-        my_remaining_laps = max(0.0, my_full_stint - my_curr_stint)
+                        my_start = state.current_stint_start.get(my_idx, my_lap)
+                        my_curr_stint = my_lap - my_start
+                        my_remaining_laps = max(0.0, my_full_stint - my_curr_stint)
 
-    # Paradas restantes tuyas: (laps_left - laps_remaining_in_tank) / full_stint
-    my_need = my_laps_left - my_remaining_laps
-    my_stops = math.ceil(my_need / my_full_stint) if my_need > 0 else 0
+                    my_need = my_laps_left - my_remaining_laps
+                    my_stops = math.ceil(my_need / my_full_stint) if my_need > 0 else 0
 
-    # --------------------------
-    # 2) Rival: estimación por historial de stints
-    # --------------------------
-    riv_lap = safe_int(ir['CarIdxLapCompleted'][idx])
-    riv_laps_left = max(0, total_laps_est - riv_lap)
+                    # --------------------------
+                    # 2) Rival: estimación por historial de stints
+                    # --------------------------
+                    riv_lap = safe_int(ir['CarIdxLapCompleted'][idx])
+                    riv_laps_left = max(0, total_laps_est - riv_lap)
 
-    riv_hist = state.stint_history.get(idx, [])
-    riv_start = state.current_stint_start.get(idx, riv_lap)
-    riv_curr_stint = riv_lap - riv_start
+                    riv_hist = state.stint_history.get(idx, [])
+                    riv_start = state.current_stint_start.get(idx, riv_lap)
+                    riv_curr_stint = riv_lap - riv_start
 
-    if len(riv_hist) > 0:
-        riv_full = sum(riv_hist) / len(riv_hist)
-    elif riv_curr_stint > 5:
-        riv_full = float(riv_curr_stint)
-    else:
-        riv_full = my_full_stint  # si no hay datos, asumimos similar a ti
+                    if len(riv_hist) > 0:
+                        riv_full = sum(riv_hist) / len(riv_hist)
+                    elif riv_curr_stint > 5:
+                        riv_full = float(riv_curr_stint)
+                    else:
+                        riv_full = my_full_stint
 
-    riv_remaining = max(0.0, riv_full - riv_curr_stint)
-    riv_need = riv_laps_left - riv_remaining
-    riv_stops = math.ceil(riv_need / riv_full) if riv_need > 0 else 0
+                    riv_remaining = max(0.0, riv_full - riv_curr_stint)
+                    riv_need = riv_laps_left - riv_remaining
+                    riv_stops = math.ceil(riv_need / riv_full) if riv_need > 0 else 0
 
-    # --------------------------
-    # 3) Diferencia (rival - tú)
-    # --------------------------
-    diff_stops = riv_stops - my_stops
-    seconds_diff = diff_stops * AVG_PIT_LOSS
+                    # --------------------------
+                    # 3) Diferencia (rival - tú)
+                    # --------------------------
+                    diff_stops = riv_stops - my_stops
+                    seconds_diff = diff_stops * AVG_PIT_LOSS
 
-    if diff_stops != 0:
-        if seconds_diff > 0:
-            strat_txt = f"+{seconds_diff:.0f}s"
-            strat_cls = "lead"
-        else:
-            strat_txt = f"{seconds_diff:.0f}s"
-            strat_cls = "lag"
-    else:
-        strat_txt = "EQUAL"
+                    if diff_stops != 0:
+                        if seconds_diff > 0:
+                            strat_txt = f"+{seconds_diff:.0f}s"
+                            strat_cls = "lead"
+                        else:
+                            strat_txt = f"{seconds_diff:.0f}s"
+                            strat_cls = "lag"
+                    else:
+                        strat_txt = "EQUAL"
 
 
                 # STINTS FORMATO TEXTO
