@@ -430,14 +430,70 @@ def loop(ir, state):
             # Truco para detectar lluvia si iRacing no da el dato directo
             # Si la pista está muy fría o húmeda (simulado con AirDensity aquí como placeholder)
             rain_val = "0" 
+
+# --- SESIÓN Y CIRCUITO ---
+session_type = "-"
+track_name = "-"
+
+try:
+    sess_num = safe_int(ir['SessionNum'])
+    sessions = ir['SessionInfo'].get('Sessions', [])
+    if sessions and 0 <= sess_num < len(sessions):
+        session_type = sessions[sess_num].get('SessionType') or sessions[sess_num].get('SessionName') or "-"
+except:
+    pass
+
+# Normalizamos a lo que quieres ver (Race / Practice / Qualy)
+st = (session_type or "").lower()
+if st.startswith("qual"):
+    session_type = "QUALY"
+elif st.startswith("prac"):
+    session_type = "PRACTICE"
+elif st.startswith("race"):
+    session_type = "RACE"
+elif st.startswith("warm"):
+    session_type = "WARMUP"
+else:
+    session_type = session_type.upper() if session_type else "-"
+
+try:
+    wi = ir['SessionInfo'].get('WeekendInfo', {})
+    track_name = wi.get('TrackDisplayName') or wi.get('TrackName') or "-"
+except:
+    pass
+
             
-            payload = {
-                "session_timer": display_timer,
-                "my_car": my_car,
-                "weather": {"air": f"{air_temp:.1f}", "track": f"{track_temp:.1f}", "rain": rain_val, "status": "DRY"},
-                "grid": drivers_data,
-                "connected": True
-            }
+            # --- SESIÓN Y CIRCUITO ---
+session_type = "-"
+track_name = "-"
+
+try:
+    sess_num = safe_int(ir['SessionNum'])
+    sessions = ir['SessionInfo'].get('Sessions', [])
+    if sessions and 0 <= sess_num < len(sessions):
+        session_type = sessions[sess_num].get('SessionType') or sessions[sess_num].get('SessionName') or "-"
+except:
+    pass
+
+# Normalizamos a lo que quieres ver (Race / Practice / Qualy)
+st = (session_type or "").lower()
+if st.startswith("qual"):
+    session_type = "QUALY"
+elif st.startswith("prac"):
+    session_type = "PRACTICE"
+elif st.startswith("race"):
+    session_type = "RACE"
+elif st.startswith("warm"):
+    session_type = "WARMUP"
+else:
+    session_type = session_type.upper() if session_type else "-"
+
+try:
+    wi = ir['SessionInfo'].get('WeekendInfo', {})
+    track_name = wi.get('TrackDisplayName') or wi.get('TrackName') or "-"
+except:
+    pass
+
             
             # ENVÍO
             try:
