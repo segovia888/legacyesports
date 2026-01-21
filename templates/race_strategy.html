@@ -1,0 +1,855 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Legacy eSports Club · Endurances</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+  <link rel="manifest" href="{{ url_for('manifest') }}">
+  <meta name="theme-color" content="#FF5A00">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --lec-orange: #FF5A00; --lec-lime: #CCFF00; --carbon: #0a0a0a;
+      --glass: rgba(20, 20, 20, 0.95); --glass-light: rgba(255, 255, 255, 0.05);
+      --border: rgba(255, 255, 255, 0.2);
+    }
+    body { background-color: var(--carbon); color: #f5f5f5; font-family: 'Roboto', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+    .bg-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}") no-repeat center center/cover; }
+    .bg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.95) 100%); }
+
+    .hero { padding: 20px 0; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.8); backdrop-filter: blur(5px); }
+    .hero h1 { font-family: 'Teko', sans-serif; font-weight: 600; font-size: 2.5rem; text-transform: uppercase; margin: 0; letter-spacing: 1px; }
+    
+    /* CARDS & PANELS */
+    .card { background: var(--glass); border: 1px solid var(--border); color: #ffffff; backdrop-filter: blur(10px); border-radius: 12px; margin-bottom: 20px; transition: all 0.3s; }
+    .card h5, .card h4, .card h2, .card h6 { font-family: 'Teko', sans-serif; text-transform: uppercase; letter-spacing: 0.5px; }
+    
+    label { font-size: 0.85rem; text-transform: uppercase; color: #eee; margin-bottom: 4px; font-weight: bold; }
+    .form-control, .form-select { background-color: #000 !important; border: 1px solid #666 !important; color: #fff !important; font-weight: 500; font-size: 1rem; }
+    .form-control:focus, .form-select:focus { background-color: #111 !important; border-color: var(--lec-orange) !important; color: #fff !important; box-shadow: 0 0 8px rgba(255, 90, 0, 0.3); }
+    input[readonly] { background-color: #050505 !important; color: var(--lec-lime) !important; border-color: #333 !important; font-weight: bold; opacity: 1 !important; }
+    
+    /* BUTTONS */
+    .btn-accent { background: var(--lec-lime); border: none; color: black; font-weight: 700; text-transform: uppercase; font-family: 'Teko', sans-serif; font-size: 1.1rem; transition: all 0.2s; }
+    .btn-accent:hover { background: #b3e600; color: black; box-shadow: 0 0 10px rgba(204, 255, 0, 0.4); }
+    .btn-outline-accent { border: 1px solid var(--lec-lime); color: var(--lec-lime); font-family: 'Teko', sans-serif; text-transform: uppercase; font-size: 1.1rem; }
+    .btn-outline-accent:hover { background: var(--lec-lime); color: black; }
+    .btn-minimize { color: #666; border: 1px solid #444; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 5px; }
+    .btn-unsaved { background-color: var(--lec-orange) !important; color: white !important; border-color: var(--lec-orange) !important; animation: pulse-save 2s infinite; }
+    @keyframes pulse-save { 0% { box-shadow: 0 0 0 0 rgba(255, 90, 0, 0.7); } 70% { box-shadow: 0 0 0 10px rgba(255, 90, 0, 0); } 100% { box-shadow: 0 0 0 0 rgba(255, 90, 0, 0); } }
+
+    /* TABLES */
+    .table-responsive { overflow: visible !important; }
+    .table { --bs-table-bg: transparent; color: #fff; border-color: var(--border); }
+    .table thead th { border-bottom: 2px solid var(--lec-orange); color: var(--lec-orange); font-family: 'Teko', sans-serif; font-size: 1.1rem; text-transform: uppercase; font-weight: 400; }
+    .table tbody tr:hover td { background: var(--glass-light); color: white; }
+    
+    /* STINTS COLORS */
+    .stint-done { background-color: rgba(0, 110, 255, 0.15) !important; border-left: 3px solid #0d6efd; }
+    .stint-done input { opacity: 0.7; color: #aaa !important; }
+    .stint-active { background-color: rgba(204, 255, 0, 0.15) !important; border-left: 3px solid var(--lec-lime); box-shadow: inset 0 0 15px rgba(204,255,0,0.1); }
+    .stint-active input { font-weight: bold; color: var(--lec-lime) !important; }
+    .stint-telemetry { background-color: rgba(204, 255, 0, 0.25) !important; border-left: 4px solid var(--lec-lime); box-shadow: inset 0 0 20px rgba(204,255,0,0.2); }
+    .stint-checker { background-color: rgba(255, 90, 0, 0.15) !important; border-left: 3px solid var(--lec-orange); }
+    
+    /* TELEMETRY BADGES */
+    .telemetry-badge { font-family: 'Teko'; letter-spacing: 1px; padding: 4px 8px; border-radius: 4px; font-size: 1rem; border: 1px solid #333; color: #555; transition: all 0.3s; }
+    .telemetry-on { border-color: var(--lec-lime); color: var(--lec-lime); box-shadow: 0 0 10px rgba(204, 255, 0, 0.2); animation: blink-dot 2s infinite; }
+    .box-alert { display: none; background: #ff0000; color: white; padding: 2px 8px; border-radius: 4px; font-weight: bold; font-family: 'Teko'; letter-spacing: 1px; animation: fast-flash 0.5s infinite; }
+    @keyframes fast-flash { 0% { opacity: 1; } 50% { opacity: 0.3; } 100% { opacity: 1; } }
+    @keyframes blink-dot { 0% { opacity: 1; } 50% { opacity: 0.5; } 100% { opacity: 1; } }
+
+    /* TYRES */
+    .neu-cell { position: relative; }
+    .tire-tooltip { visibility: hidden; position: absolute; top: 50%; right: 100%; transform: translateY(-50%); margin-right: 15px; width: 140px; background: #000; border: 2px solid var(--lec-lime); border-radius: 8px; padding: 10px; z-index: 9999 !important; box-shadow: 0 0 20px rgba(0,0,0,1); opacity: 0; transition: opacity 0.2s; pointer-events: none; }
+    .neu-cell:hover .tire-tooltip { visibility: visible; opacity: 1; }
+    .car-schema { display: grid; grid-template-columns: 1fr 2px 1fr; grid-template-rows: 1fr 1fr; gap: 8px; align-items: center; justify-items: center; }
+    .tire-box { width: 45px; height: 55px; background: #111; border: 1px solid #444; border-radius: 4px; display: flex; align-items: center; justify-content: center; font-family: 'Teko'; font-size: 1.3rem; color: white; font-weight: bold; }
+    .chassis-line { background: #333; width: 2px; height: 100%; grid-row: 1 / span 2; grid-column: 2; }
+    .tire-good { color: var(--lec-lime); border-color: var(--lec-lime); }
+    .tire-mid { color: #ffc107; border-color: #ffc107; }
+    .tire-bad { color: #ff4444; border-color: #ff4444; }
+    
+    .text-info { color: #0dcaf0 !important; } .text-warning { color: #ffc107 !important; } .text-lime { color: var(--lec-lime) !important; }
+  </style>
+</head>
+
+<body>
+  <div class="bg-container"><div class="bg-overlay"></div></div>
+
+  <header class="hero">
+    <div class="container">
+      <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+        <div class="d-flex align-items-center gap-3">
+            <a href="{{ url_for('index') }}" class="btn btn-sm btn-outline-light"><i class="fas fa-arrow-left"></i> Volver</a>
+            <div><h1 class="h3 mb-0">RACE STRATEGY <span style="color:var(--lec-lime)">// ENDURANCES</span></h1></div>
+        </div>
+        <div class="d-flex align-items-center">
+            <button class="btn btn-sm btn-outline-info me-3" data-bs-toggle="modal" data-bs-target="#bridgeModal">
+                <i class="fas fa-download"></i> APP TELEMETRÍA
+            </button>
+            <div id="boxAlert" class="box-alert me-2">⚠️ BOX BOX BOX</div>
+            <div id="telemetryStatus" class="telemetry-badge"><i class="fas fa-satellite-dish"></i> TELEMETRY</div>
+            <div id="sessionInfoDisplay" class="ms-2 text-muted small" style="font-family:'Teko'; font-size:1.1rem; border-left:1px solid #444; padding-left:10px;"></div>
+        </div>
+      </div>
+    </div>
+  </header>
+
+  <main class="py-4">
+    <div class="container">
+      
+      <div class="text-center mb-4">
+        <h2 class="fw-bold mb-0" style="font-size: 3rem; line-height: 1;">LEGACY <span style="color:var(--lec-orange)">ESPORTS</span></h2>
+        <h4 class="text-secondary" style="letter-spacing: 3px;">STRATEGY DEPARTMENT</h4>
+      </div>
+
+      <div class="card shadow-lg mb-3">
+          <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-2 px-3">
+              <h5 class="m-0 small text-muted"><i class="fas fa-car me-2"></i> COCHE</h5>
+              <button class="btn btn-sm btn-minimize" type="button" data-bs-toggle="collapse" data-bs-target="#collapseCar"><i class="fas fa-minus"></i></button>
+          </div>
+          <div id="collapseCar" class="collapse show">
+              <div class="card-body pt-0 px-4 pb-3">
+                  <div class="row g-3">
+                    <div class="col-md-4">
+                      <label>Categoría</label>
+                      <select id="carClass" class="form-select text-center fw-bold">
+                        {% for cat, cars in car_categories.items() %}<option value="{{ cat }}">{{ cat }}</option>{% endfor %}
+                      </select>
+                    </div>
+                    <div class="col-md-8">
+                      <label>Vehículo</label>
+                      <select id="carName" class="form-select text-center fw-bold" style="color: var(--lec-lime) !important;">
+                        {% for cat, cars in car_categories.items() %}
+                          {% for car in cars %}<option value="{{ car }}" data-class="{{ cat }}">{{ car }}</option>{% endfor %}
+                        {% endfor %}
+                      </select>
+                    </div>
+                  </div>
+              </div>
+          </div>
+      </div>
+
+      <div class="card shadow-lg mb-3">
+        <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-2 px-3" style="border-bottom: 1px solid var(--border) !important;">
+          <h5 class="m-0"><i class="fas fa-sliders-h me-2"></i> Parámetros de Carrera</h5>
+          <div class="d-flex align-items-center gap-2">
+              <div class="d-flex flex-wrap gap-2 align-items-center">
+                <button class="btn btn-accent btn-sm" id="btnGenerateFull" title="Generar Horario Completo"><i class="fas fa-magic"></i></button>
+                <button class="btn btn-outline-light btn-sm" id="btnClearRelays" title="Limpiar Tabla"><i class="fas fa-trash"></i></button>
+                <button class="btn btn-outline-light btn-sm" id="btnCopyRelay" title="Copiar al Portapapeles"><i class="fas fa-copy"></i></button>
+                <div class="vr bg-secondary mx-1"></div>
+                
+                <div class="btn-group btn-group-sm">
+                    <button id="btnSaveStrategy" class="btn btn-outline-accent"><i class="fas fa-save"></i> <span id="saveBtnText">Guardar</span></button>
+                    <button type="button" class="btn btn-outline-accent dropdown-toggle dropdown-toggle-split" data-bs-toggle="dropdown" aria-expanded="false"><span class="visually-hidden">Toggle</span></button>
+                    <ul class="dropdown-menu dropdown-menu-dark"><li><a class="dropdown-item" href="#" id="btnSaveAsNew"><i class="fas fa-copy me-2"></i> Guardar Como Nueva...</a></li></ul>
+                </div>
+                
+                <select id="savedStrategies" class="form-select form-select-sm d-inline-block w-auto" style="max-width: 150px;">
+                  <option value="">Seleccionar...</option>
+                  {% for s in strategies %}<option value="{{ s.id }}">{{ s.created_at.strftime('%d/%m %H:%M') }} · {{ s.name }}</option>{% endfor %}
+                </select>
+                <button id="btnLoadStrategy" class="btn btn-sm btn-secondary fw-bold">Cargar</button>
+              </div>
+              <button class="btn btn-sm btn-minimize ms-2" type="button" data-bs-toggle="collapse" data-bs-target="#collapseParams"><i class="fas fa-minus"></i></button>
+          </div>
+        </div>
+
+        <div id="collapseParams" class="collapse show">
+            <div class="card-body p-4">
+                <div class="row g-3 align-items-end mb-3">
+                  <div class="col-lg-2 col-6 border-end border-secondary">
+                    <label class="text-white">Inicio (Local)</label>
+                    <input id="raceStartLocal" type="time" class="form-control form-control-lg fw-bold" value="12:00">
+                  </div>
+                  <div class="col-lg-2 col-6 border-end border-secondary">
+                    <div class="d-flex justify-content-center gap-2 mb-1">
+                        <label>Duración</label>
+                        <select id="raceDurationMode" class="form-select form-select-sm py-0 px-1" style="width:auto; height: 20px; font-size: 0.7rem;">
+                          <option value="time" selected>Tiempo</option>
+                          <option value="laps">Vueltas</option>
+                        </select>
+                    </div>
+                    <input id="raceDuration" type="text" class="form-control form-control-lg fw-bold text-center" value="01:00:00" placeholder="hh:mm:ss">
+                  </div>
+                  <div class="col-lg-2 col-6">
+                    <label class="text-white">Fin (Local)</label>
+                    <input id="raceEndLocal" type="time" class="form-control form-control-lg" value="13:00" readonly>
+                  </div>
+                  <div class="col-lg-1 d-none d-lg-block"></div> 
+                  <div class="col-lg-2 col-6 border-end border-secondary">
+                    <label class="text-warning">Inicio (Server)</label>
+                    <input id="raceStartServer" type="time" class="form-control form-control-lg fw-bold" value="12:00">
+                  </div>
+                  <div class="col-lg-2 col-6">
+                    <label class="text-white">Fin (Server)</label>
+                    <input id="raceEndServer" type="time" class="form-control form-control-lg" value="13:00" readonly>
+                  </div>
+                </div>
+                <hr>
+                <div class="row g-3 align-items-end">
+                  <div class="col-md-2"><label>Tiempo Pit Lane</label><input id="pitService" type="time" step="1" class="form-control text-warning" value="00:01:00" title="Tiempo total pit"></div>
+                  <div class="col-md-2"><label>Tanque (L)</label><input id="tankSize" type="number" class="form-control text-info" style="color:#0dcaf0!important;" value="100"></div>
+                  <div class="col-md-2"><label>Consumo (L/v)</label><input id="consLap" type="number" step="0.01" class="form-control text-info" style="color:#0dcaf0!important;" value="3.4"></div>
+                  <div class="col-md-2"><label>Extra In/Out</label><input id="pitLossTime" type="number" class="form-control text-danger" style="color:#ff6666 !important;" value="15" placeholder="Segundos"></div>
+                  <div class="col-md-2"><label>Lap Time</label><input id="lapTimeGlobal" type="text" class="form-control fw-bold" value="2:05.000"></div>
+                  <div class="col-md-2"><label>Extra Laps</label><input id="extraLaps" type="number" class="form-control" value="0"></div>
+                </div>
+                <div class="row mt-3">
+                  <div class="col text-center">
+                    <div class="d-inline-block px-4 py-2 border rounded border-secondary bg-black">
+                        <span class="text-white small text-uppercase me-2">STATS:</span>
+                        <span class="fw-bold text-white">Vueltas: <span id="statTotalLaps" class="fs-5" style="color:var(--lec-lime)!important;">0</span></span>
+                        <span class="mx-3 text-secondary">|</span>
+                        <span class="fw-bold text-white">Stints: <span id="statStints" class="fs-5" style="color:var(--lec-lime)!important;">0</span></span>
+                    </div>
+                  </div>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <div class="card shadow-lg mb-3">
+        <div class="card-header bg-transparent border-0 d-flex justify-content-between align-items-center py-2 px-3">
+          <h5 class="m-0"><i class="fas fa-users-cog me-2"></i> Roster</h5>
+          <button class="btn btn-sm btn-minimize" type="button" data-bs-toggle="collapse" data-bs-target="#collapseRoster"><i class="fas fa-minus"></i></button>
+        </div>
+        <div id="collapseRoster" class="collapse show">
+            <div class="card-body pt-0 px-4 pb-3">
+                <div class="d-flex gap-2 mb-2 justify-content-end">
+                    <input list="pilotList" id="pilotNameInput" class="form-control form-control-sm" placeholder="Nombre Piloto" style="width: 150px;">
+                    <datalist id="pilotList">
+                    {% if drivers_db %}
+                        {% for driver in drivers_db %}<option value="{{ driver.name }}">{{ driver.iracing_id }}</option>{% endfor %}
+                    {% endif %}
+                    </datalist>
+                    
+                    <input id="pilotLapInput" type="text" class="form-control form-control-sm" value="2:05.000" style="width: 100px;">
+                    <button class="btn btn-sm btn-outline-accent" id="btnAddPilot"><i class="fas fa-plus"></i></button>
+                    <button class="btn btn-sm btn-outline-danger" id="btnClearPilots"><i class="fas fa-times"></i></button>
+                </div>
+                <div class="table-responsive">
+                  <table class="table table-sm align-middle" id="tblPilots">
+                    <thead><tr><th>#</th><th>Piloto</th><th>Ritmo</th><th>Stints</th><th>ID (iRacing)</th><th></th></tr></thead>
+                    <tbody></tbody>
+                  </table>
+                </div>
+            </div>
+        </div>
+      </div>
+
+      <div class="card shadow-lg p-4" id="planCarreraCard">
+        <div class="d-flex justify-content-between align-items-center mb-3">
+          <h5 class="m-0 text-white"><i class="fas fa-list-ol me-2"></i> Plan de Carrera</h5>
+          <div class="d-flex gap-3 align-items-center">
+            <div class="form-check form-switch d-flex align-items-center gap-2">
+                <input class="form-check-input" type="checkbox" id="liveModeSwitch" style="cursor:pointer;">
+                <label class="form-check-label text-uppercase small fw-bold" for="liveModeSwitch" style="color:var(--lec-lime); cursor:pointer;">Live Timing</label>
+            </div>
+            <div class="text-end small me-2" style="color:#aaa;"><i class="fas fa-clock"></i> <span id="liveClock">--:--</span></div>
+            <select id="pilotFilter" class="form-select form-select-sm" style="width:auto;"><option value="__all__">Ver Todos</option></select>
+            <button class="btn btn-sm btn-outline-light" id="btnRefreshPilots"><i class="fas fa-sync"></i></button>
+            <button class="btn btn-sm btn-outline-accent" id="btnAddRelay"><i class="fas fa-plus"></i> Stint Manual</button>
+          </div>
+        </div>
+        
+        <div class="table-responsive">
+          <table class="table table-hover align-middle" id="tblRelay" style="overflow: visible;">
+            <thead>
+              <tr><th>#</th><th>Piloto</th><th>Inicio (Loc)</th><th>Fin (Loc)</th><th class="text-white">Inicio (Srv)</th><th class="text-white">Fin (Srv)</th><th>Duración</th><th>Laps</th><th>Fuel</th><th>INC</th><th>NEU</th><th>Pit</th><th>Notas</th><th></th></tr>
+            </thead>
+            <tbody></tbody>
+            <tfoot style="border-top: 2px solid var(--lec-orange);">
+              <tr class="fw-bold text-white">
+                <td colspan="2">TOTALES</td>
+                <td colspan="4" id="ftDrivers" class="text-white small fw-normal">—</td>
+                <td id="ftRelayDur" class="fs-5 text-lime">00:00</td>
+                <td id="ftRelayLaps" class="fs-5 text-info">0</td>
+                <td id="ftRelayFuel" class="fs-5 text-warning">0</td>
+                <td id="ftRelayInc" class="fs-5 text-danger-glow">0x</td>
+                <td></td>
+                <td id="ftRelayPit">00:00</td>
+                <td colspan="2"></td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+        <div class="mt-3 p-3 rounded bg-dark border border-secondary">
+            <span class="text-white text-uppercase small d-block mb-1 fw-bold">Resumen:</span>
+            <div id="relayByDriver" class="text-white small font-monospace"></div>
+        </div>
+      </div>
+
+      <div class="card shadow-sm p-4">
+        <h5 class="mb-3 text-secondary"><i class="fas fa-database me-2"></i> Estrategias Guardadas</h5>
+        <div class="table-responsive">
+          <table class="table table-sm align-middle mb-0" id="tblStrategies">
+            <thead><tr><th>#</th><th>Fecha</th><th>Cat</th><th>Coche</th><th>Nombre</th><th>Acciones</th></tr></thead>
+            <tbody>
+              {% if strategies %}
+                {% for s in strategies %}
+                  <tr data-id="{{ s.id }}">
+                    <td class="text-white fw-bold">{{ loop.index }}</td>
+                    <td class="text-white small">{{ s.created_at.strftime('%d/%m %H:%M') }}</td>
+                    <td><span class="badge bg-secondary text-white">{{ s.car_class }}</span></td>
+                    <td class="text-white">{{ s.car_name }}</td>
+                    <td class="text-start fw-bold text-white">{{ s.name }}</td>
+                    <td>
+                      <button class="btn btn-sm btn-outline-accent btn-strategy-load"><i class="fas fa-upload"></i></button>
+                      <button class="btn btn-sm btn-outline-danger btn-strategy-delete ms-1"><i class="fas fa-trash-alt"></i></button>
+                    </td>
+                  </tr>
+                {% endfor %}
+              {% else %}<tr><td colspan="6" class="text-center text-white py-3">No hay estrategias guardadas.</td></tr>{% endif %}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="py-4 text-center text-muted small border-top border-secondary">Legacy eSports Club · Engineering Department · Strategy Tool v8.7</footer>
+
+  <div class="modal fade" id="bridgeModal" tabindex="-1" style="z-index: 10000;">
+    <div class="modal-dialog">
+      <div class="modal-content" style="background: #111; border: 1px solid var(--lec-lime); color: white;">
+        <div class="modal-header border-secondary">
+          <h5 class="modal-title font-monospace"><i class="fas fa-satellite-dish text-lime"></i> CONECTAR TELEMETRÍA</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body">
+          <p class="small text-secondary">Para que los datos (Fuel, Ruedas, Piloto) salgan en esta pantalla, el piloto que conduce debe ejecutar este pequeño programa en su PC.</p>
+          <div class="list-group list-group-flush">
+              <div class="list-group-item bg-transparent text-white border-secondary">
+                  <div class="d-flex w-100 justify-content-between"><h6 class="mb-1 text-lime">PASO 1: Descargar</h6></div>
+                  <p class="mb-1 small">Descarga el script configurado para este servidor.</p>
+                  <a href="{{ url_for('download_bridge_script') }}" class="btn btn-sm btn-primary w-100 mt-2 fw-bold"><i class="fas fa-file-download"></i> DESCARGAR legacy_bridge.py</a>
+              </div>
+              <div class="list-group-item bg-transparent text-white border-secondary">
+                  <div class="d-flex w-100 justify-content-between"><h6 class="mb-1 text-lime">PASO 2: Instalar Requisitos</h6></div>
+                  <p class="mb-1 small">Necesitas Python instalado. Luego abre terminal y escribe:</p>
+                  <code class="d-block bg-black p-2 rounded mt-1 text-info user-select-all">pip install irsdk requests</code>
+              </div>
+              <div class="list-group-item bg-transparent text-white border-0">
+                  <div class="d-flex w-100 justify-content-between"><h6 class="mb-1 text-lime">PASO 3: ¡A Correr!</h6></div>
+                  <p class="mb-1 small">Haz doble click en el archivo o ejecútalo:</p>
+                  <code class="d-block bg-black p-2 rounded mt-1 text-warning user-select-all">python legacy_bridge.py</code>
+              </div>
+          </div>
+        </div>
+        <div class="modal-footer border-secondary justify-content-center">
+            <small class="text-white fst-italic">Si pone "✅ iRacing CONECTADO", aparecerás aquí automáticamente.</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+
+      // === VARIABLES DE ESTADO ===
+      let currentLoadedId = null;
+      let currentLoadedName = ""; 
+      let hasUnsavedChanges = false;
+      const pilotState = [];
+      let telemetryInterval = null;
+      let lastPitState = false; 
+
+      // --- DICCIONARIO DE PILOTOS (AUTO-LINK ID) ---
+      const driverDatabase = {};
+      {% if drivers_db %}
+          {% for d in drivers_db %}
+              driverDatabase["{{ d.name|lower }}"] = "{{ d.iracing_id }}";
+          {% endfor %}
+      {% endif %}
+
+      // --- UTILS ---
+      const pad = (n) => String(Math.floor(n)).padStart(2, '0');
+      function toSecHMS(str) {
+        if (!str) return 0;
+        const s = String(str).trim().replace(',', '.');
+        const parts = s.split(':');
+        if (parts.length === 3) return parseInt(parts[0]) * 3600 + parseInt(parts[1]) * 60 + parseFloat(parts[2]);
+        if (parts.length === 2) return parseInt(parts[0]) * 60 + parseFloat(parts[1]);
+        return parseFloat(s) * 60;
+      }
+      function toSecFlex(hms) {
+        if (!hms) return 0;
+        const p = hms.trim().split(':').map(Number);
+        if (p.length === 3) return (p[0] * 3600) + (p[1] * 60) + p[2];
+        if (p.length === 2) return (p[0] * 3600) + (p[1] * 60);
+        if (p.length === 1) return (parseFloat(p[0]) || 0) * 3600;
+        return 0;
+      }
+      const secToHHMM = (s) => {
+        s = Math.floor((s % 86400 + 86400) % 86400);
+        return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}`;
+      };
+      const secToHHMMSS = (sec) => {
+        sec = Math.floor(sec);
+        return `${pad(Math.floor(sec / 3600))}:${pad(Math.floor((sec % 3600) / 60))}:${pad(sec % 60)}`;
+      };
+      const formatLap = (sec) => {
+        sec = Number(sec) || 0;
+        return `${Math.floor(sec / 60)}:${(sec % 60).toFixed(3).padStart(6, '0')}`;
+      };
+
+      // --- AUTO-CARGAR DESDE URL (DISCORD LINK) ---
+      const urlParams = new URLSearchParams(window.location.search);
+      const autoLoadId = urlParams.get('id');
+      
+      if (autoLoadId) {
+          setTimeout(() => {
+              const select = document.getElementById('savedStrategies');
+              if(select) { select.value = autoLoadId; loadStrategyById(autoLoadId); }
+              window.history.replaceState({}, document.title, "/estrategia");
+          }, 500);
+      }
+
+      // === SECURITY & SAVE STATE ===
+      function markDirty() {
+          if (!hasUnsavedChanges) {
+              hasUnsavedChanges = true;
+              const btn = document.getElementById('btnSaveStrategy');
+              btn.classList.remove('btn-outline-accent');
+              btn.classList.add('btn-unsaved');
+              document.getElementById('saveBtnText').textContent = "GUARDAR (PENDIENTE)";
+          }
+      }
+      function markClean() {
+          hasUnsavedChanges = false;
+          const btn = document.getElementById('btnSaveStrategy');
+          btn.classList.add('btn-outline-accent');
+          btn.classList.remove('btn-unsaved');
+          document.getElementById('saveBtnText').textContent = "Guardar";
+      }
+      window.addEventListener('beforeunload', (e) => { if (hasUnsavedChanges) { e.preventDefault(); e.returnValue = ''; } });
+
+      const carClass = document.getElementById('carClass');
+      const carName = document.getElementById('carName');
+      function filterCars() {
+        const cls = carClass.value;
+        [...carName.options].forEach(opt => opt.hidden = (opt.getAttribute('data-class') !== cls));
+        const first = [...carName.options].find(o => !o.hidden);
+        if (first) carName.value = first.value;
+      }
+      carClass.addEventListener('change', filterCars);
+      filterCars();
+
+      function getRaceDurationSeconds() {
+        const mode = document.getElementById('raceDurationMode').value;
+        const durInput = document.getElementById('raceDuration').value.trim();
+        const extra = parseInt(document.getElementById('extraLaps').value || '0');
+        const lapSec = toSecHMS(document.getElementById('lapTimeGlobal').value || '0:00');
+        if (mode === 'laps') return Math.max(0, parseInt(durInput || '0') + extra) * lapSec;
+        return toSecFlex(durInput);
+      }
+
+      function updateRaceTimes() {
+        const startL = toSecFlex(document.getElementById('raceStartLocal').value || '00:00');
+        let startSStr = document.getElementById('raceStartServer').value;
+        let startS = startSStr ? toSecFlex(startSStr) : startL;
+        if (!startSStr) document.getElementById('raceStartServer').value = secToHHMM(startS);
+        const dur = getRaceDurationSeconds();
+        document.getElementById('raceEndLocal').value = secToHHMM(startL + dur);
+        document.getElementById('raceEndServer').value = secToHHMM(startS + dur);
+      }
+
+      function calcLapsPerStint() {
+        const t = parseFloat(document.getElementById('tankSize').value || 0);
+        const c = parseFloat(document.getElementById('consLap').value || 0);
+        return (c > 0) ? Math.floor(t / c) : 0;
+      }
+
+      function applyDynamicCons() {
+          const tank = parseFloat(document.getElementById('tankSize').value) || 100;
+          const cons = parseFloat(document.getElementById('consLap').value) || 1;
+          if(cons <= 0) return;
+          const maxLaps = Math.floor(tank / cons);
+          const rows = document.querySelectorAll('#tblRelay tbody tr');
+          if(rows.length === 0) return;
+          rows.forEach(tr => { tr.querySelector('.laps').textContent = maxLaps; });
+          cascadeTimes(rows[0], 'start');
+          recalcRelayTotals();
+      }
+
+      ['raceStartLocal', 'raceStartServer', 'raceDuration', 'lapTimeGlobal', 'extraLaps', 'raceDurationMode', 'pitLossTime']
+        .forEach(id => document.getElementById(id).addEventListener('input', () => {
+             updateRaceTimes(); recalcRelayTotals(); monitorStints(); markDirty();
+        }));
+      ['tankSize', 'consLap'].forEach(id => document.getElementById(id).addEventListener('input', () => {
+             applyDynamicCons(); markDirty();
+      }));
+      document.getElementById('liveModeSwitch').addEventListener('change', () => { monitorStints(); });
+
+      // TELEMETRY
+      async function fetchTelemetry() {
+          try {
+              const res = await fetch('/api/telemetry/live');
+              const data = await res.json();
+              const badge = document.getElementById('telemetryStatus');
+              const info = document.getElementById('sessionInfoDisplay');
+              if (data.connected) {
+                  badge.classList.add('telemetry-on');
+                  if(data.track) { info.textContent = `${data.track} | ${data.session}`; info.classList.add('session-visible'); }
+                  updateTableWithTelemetry(data);
+                  if (data.on_pit_road && !lastPitState) handlePitEntry();
+                  lastPitState = data.on_pit_road;
+                  document.getElementById('boxAlert').style.display = data.on_pit_road ? 'block' : 'none';
+              } else {
+                  badge.classList.remove('telemetry-on');
+                  info.classList.remove('session-visible');
+              }
+          } catch(e) {}
+      }
+      function handlePitEntry() {
+          const activeRow = document.querySelector('tr.stint-active');
+          if (!activeRow) return;
+          const now = new Date();
+          const currentSec = (now.getHours() * 3600) + (now.getMinutes() * 60);
+          activeRow.querySelector('.end').value = secToHHMM(currentSec);
+          cascadeTimes(activeRow, 'end'); recalcRelayTotals(); monitorStints(); markDirty();
+      }
+      function updateTableWithTelemetry(data) {
+          document.getElementById('ftRelayInc').textContent = (data.incidents || 0) + "x";
+          if (!data.driver_name && !data.driver_id) return;
+          const rows = Array.from(document.querySelectorAll('#tblRelay tbody tr'));
+          const pilotInRoster = pilotState.find(p => p.id && String(p.id) === String(data.driver_id));
+          let targetName = pilotInRoster ? pilotInRoster.name.toLowerCase().trim() : String(data.driver_name).toLowerCase().trim();
+          rows.forEach(tr => {
+              const driverInput = tr.querySelector('.driver'); if (!driverInput) return;
+              const rowDriver = driverInput.value.trim().toLowerCase();
+              tr.classList.remove('stint-telemetry');
+              if (tr.classList.contains('stint-active') && rowDriver === targetName) {
+                  tr.classList.add('stint-telemetry');
+                  const fuelCell = tr.querySelector('.fuel');
+                  if(fuelCell) { fuelCell.textContent = parseFloat(data.fuel).toFixed(2); fuelCell.style.color = "#0dcaf0"; fuelCell.style.fontWeight = "900"; }
+                  if (data.tires && data.tires.avg) {
+                      const neuCell = tr.querySelector('.neu-cell');
+                      const avgInput = neuCell.querySelector('.avg-input');
+                      avgInput.value = data.tires.avg + "%";
+                      avgInput.style.color = data.tires.avg < 50 ? "#ff4444" : "var(--lec-lime)";
+                      avgInput.style.fontWeight = "bold";
+                      neuCell.querySelector('.tire-fl').textContent = data.tires.fl + "%";
+                      neuCell.querySelector('.tire-fr').textContent = data.tires.fr + "%";
+                      neuCell.querySelector('.tire-rl').textContent = data.tires.rl + "%";
+                      neuCell.querySelector('.tire-rr').textContent = data.tires.rr + "%";
+                      ['fl','fr','rl','rr'].forEach(p => {
+                          const box = neuCell.querySelector('.tire-'+p); const val = data.tires[p];
+                          box.className = "tire-box tire-" + p;
+                          if(val > 70) box.classList.add('tire-good'); else if(val > 40) box.classList.add('tire-mid'); else box.classList.add('tire-bad');
+                      });
+                  }
+                  if (!tr.dataset.startInc) tr.dataset.startInc = data.incidents;
+                  const stintInc = data.incidents - parseInt(tr.dataset.startInc || 0);
+                  const incCell = tr.querySelector('.inc-cell');
+                  if(stintInc > 0) { incCell.textContent = "+" + stintInc + "x"; incCell.style.color = "#ff4444"; incCell.style.fontWeight = "bold"; } 
+                  else { incCell.textContent = "0x"; incCell.style.color = "#aaa"; }
+              }
+          });
+      }
+      setInterval(fetchTelemetry, 1000);
+
+      function renderPilotTable() {
+        const tbody = document.querySelector('#tblPilots tbody'); tbody.innerHTML = '';
+        pilotState.forEach((p, i) => {
+          const tr = document.createElement('tr');
+          tr.innerHTML = `<td class="text-white fw-bold">${i + 1}</td><td><input class="form-control form-control-sm name" value="${p.name}" style="background:transparent;border:none;color:white;"></td><td><input class="form-control form-control-sm laptime" value="${formatLap(p.lapSec)}" style="background:transparent;border:none;color:var(--lec-lime);"></td><td><input type="number" min="1" class="form-control form-control-sm stints-input" value="${p.stints || 1}" style="background:transparent;border:none;color:#fff;text-align:center;"></td><td><input type="number" class="form-control form-control-sm id-input" value="${p.id || ''}" placeholder="ID" style="background:transparent;border:none;color:var(--lec-orange);text-align:center;font-weight:bold;"></td><td><button class="btn btn-sm btn-outline-danger border-0 del"><i class="fas fa-trash"></i></button></td>`;
+          tr.querySelector('.del').onclick = () => { pilotState.splice(i, 1); renderPilotTable(); refreshPilotOptions(); markDirty(); };
+          tr.querySelector('.name').oninput = e => { p.name = e.target.value; refreshPilotOptions(); markDirty(); };
+          tr.querySelector('.laptime').oninput = e => { p.lapSec = toSecHMS(e.target.value); recalcRelayTotals(); markDirty(); };
+          tr.querySelector('.stints-input').oninput = e => { p.stints = parseInt(e.target.value) || 1; markDirty(); };
+          tr.querySelector('.id-input').oninput = e => { p.id = e.target.value; markDirty(); };
+          tbody.appendChild(tr);
+        });
+        refreshPilotOptions();
+      }
+      document.getElementById('btnAddPilot').onclick = () => {
+        const nameInput = document.getElementById('pilotNameInput').value.trim(); if (!nameInput) return;
+        let autoId = ''; const lowerName = nameInput.toLowerCase();
+        if (driverDatabase[lowerName]) autoId = driverDatabase[lowerName];
+        pilotState.push({ name: nameInput, lapSec: toSecHMS(document.getElementById('pilotLapInput').value), stints: 1, id: autoId });
+        document.getElementById('pilotNameInput').value = ''; renderPilotTable(); markDirty();
+      };
+      document.getElementById('btnClearPilots').onclick = () => { if (confirm('¿Borrar pilotos?')) { pilotState.length = 0; renderPilotTable(); markDirty(); } };
+
+      function renumRelay() { document.querySelectorAll('#tblRelay tbody tr .idx').forEach((el, i) => el.textContent = i + 1); }
+      function collectPilots() { const set = new Set(pilotState.map(p => p.name)); document.querySelectorAll('#tblRelay .driver').forEach(i => { if (i.value) set.add(i.value) }); return Array.from(set).sort(); }
+      function refreshPilotOptions() { const sel = document.getElementById('pilotFilter'); const curr = sel.value; sel.innerHTML = '<option value="__all__">Ver Todos</option>' + collectPilots().map(p => `<option value="${p}">${p}</option>`).join(''); sel.value = curr; }
+      document.getElementById('pilotFilter').onchange = applyPilotFilter;
+      document.getElementById('btnRefreshPilots').onclick = () => { refreshPilotOptions(); applyPilotFilter(); };
+      function applyPilotFilter() { const v = document.getElementById('pilotFilter').value; document.querySelectorAll('#tblRelay tbody tr').forEach(tr => { const n = tr.querySelector('.driver').value.trim(); tr.style.display = (v === '__all__' || n === v) ? '' : 'none'; }); recalcRelayTotals(); }
+
+      function cascadeTimes(fromTr, mode) {
+        const rows = Array.from(document.querySelectorAll('#tblRelay tbody tr'));
+        const idx = rows.indexOf(fromTr); if (idx === -1) return;
+        const pitService = toSecFlex(document.getElementById('pitService').value);
+        const lapGlobal = toSecHMS(document.getElementById('lapTimeGlobal').value);
+        const pitLossTotal = parseFloat(document.getElementById('pitLossTime').value) || 0;
+        let newEndForCurrent = 0;
+        if (mode === 'start') {
+            const startVal = toSecFlex(fromTr.querySelector('.start').value || '00:00');
+            const laps = parseInt(fromTr.querySelector('.laps').textContent || '0');
+            const driverName = fromTr.querySelector('.driver').value.trim();
+            const pilot = pilotState.find(p => p.name.toLowerCase() === driverName.toLowerCase());
+            const lapSec = pilot ? pilot.lapSec : lapGlobal;
+            let loss = pitLossTotal; if (idx === 0 || idx === rows.length - 1) loss = pitLossTotal / 2;
+            newEndForCurrent = startVal + (laps * (lapSec || 120)) + loss;
+            fromTr.querySelector('.end').value = secToHHMM(newEndForCurrent);
+        } else if (mode === 'end') {
+            newEndForCurrent = toSecFlex(fromTr.querySelector('.end').value || '00:00');
+            const startVal = toSecFlex(fromTr.querySelector('.start').value || '00:00');
+            if(newEndForCurrent < startVal) newEndForCurrent += 86400;
+            const newDur = newEndForCurrent - startVal;
+            const driverName = fromTr.querySelector('.driver').value.trim();
+            const pilot = pilotState.find(p => p.name.toLowerCase() === driverName.toLowerCase());
+            const lapSec = pilot ? pilot.lapSec : lapGlobal;
+            let loss = pitLossTotal; if (idx === 0 || idx === rows.length - 1) loss /= 2;
+            if(lapSec > 0) fromTr.querySelector('.laps').textContent = Math.floor(Math.max(0, newDur - loss) / lapSec);
+        }
+        let prevEnd = newEndForCurrent;
+        for (let i = idx + 1; i < rows.length; i++) {
+            const tr = rows[i];
+            const currLaps = parseInt(tr.querySelector('.laps').textContent || '0');
+            const cDriver = tr.querySelector('.driver').value.trim();
+            const cPilot = pilotState.find(p => p.name.toLowerCase() === cDriver.toLowerCase());
+            const cLapSec = cPilot ? cPilot.lapSec : lapGlobal;
+            let cLoss = pitLossTotal; if (i === rows.length - 1) cLoss /= 2; 
+            let nextStart = prevEnd + pitService;
+            let nextEnd = nextStart + (currLaps * (cLapSec || 120)) + cLoss;
+            tr.querySelector('.start').value = secToHHMM(nextStart);
+            tr.querySelector('.end').value = secToHHMM(nextEnd);
+            prevEnd = nextEnd;
+        }
+      }
+
+      function monitorStints() {
+        const now = new Date(); const curr = (now.getHours() * 3600) + (now.getMinutes() * 60);
+        document.getElementById('liveClock').textContent = secToHHMM(curr);
+        const isLive = document.getElementById('liveModeSwitch').checked;
+        const rows = Array.from(document.querySelectorAll('#tblRelay tbody tr'));
+        if (!isLive) { rows.forEach(tr => tr.classList.remove('stint-done', 'stint-active', 'stint-checker', 'stint-overtime')); return; }
+        let activeIdx = -1; let dayOffset = 0; let lastStart = -1;
+        const timeline = rows.map((tr, i) => {
+           let s = toSecFlex(tr.querySelector('.start').value); let e = toSecFlex(tr.querySelector('.end').value);
+           if (lastStart !== -1 && s < (lastStart - 43200)) dayOffset += 86400; lastStart = s;
+           let linStart = s + dayOffset; let linEnd = e + dayOffset; if (e < s) linEnd += 86400;
+           return { index: i, start: linStart, end: linEnd, tr };
+        });
+        const candidates = [curr, curr + 86400, curr - 86400];
+        for (let t of candidates) { const match = timeline.find(it => t >= it.start && t <= it.end); if (match) { activeIdx = match.index; break; } }
+        if (activeIdx === -1) {
+           for (let t of candidates) { const up = timeline.find(it => it.start > t); if (up && (up.start - t) < 7200) { activeIdx = up.index - 1; break; } }
+        }
+        if (activeIdx === -1) { const lastStint = timeline[timeline.length - 1]; for (let t of candidates) { if (t > lastStint.end && (t - lastStint.end) < 86400) { activeIdx = timeline.length; break; } } }
+        timeline.forEach(it => {
+           it.tr.classList.remove('stint-done', 'stint-active', 'stint-checker', 'stint-overtime');
+           if (activeIdx !== -1) { if (it.index < activeIdx) it.tr.classList.add('stint-done'); else if (it.index === activeIdx) it.tr.classList.add('stint-active'); }
+           if (it.tr.querySelector('.notes').value.includes('Final')) it.tr.classList.add('stint-checker');
+        });
+      }
+
+      document.querySelector('#tblRelay tbody').addEventListener('change', (e) => {
+          if (e.target.classList.contains('start')) { cascadeTimes(e.target.closest('tr'), 'start'); recalcRelayTotals(); monitorStints(); markDirty(); }
+          if (e.target.classList.contains('end')) { cascadeTimes(e.target.closest('tr'), 'end'); recalcRelayTotals(); monitorStints(); markDirty(); }
+          if (e.target.classList.contains('driver') || e.target.classList.contains('notes')) { recalcRelayTotals(); refreshPilotOptions(); markDirty(); }
+      });
+
+      function addRelayRow(data) {
+        const d = Object.assign({ driver: '', start: '00:00', end: '00:00', laps: 0, fuel: 0, pit: '00:00:00', notes: '' }, data || {});
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="idx text-white fw-bold"></td><td><input class="form-control form-control-sm driver fw-bold" placeholder="Nombre" value="${d.driver}"></td><td><input type="time" class="form-control form-control-sm start" value="${d.start}"></td><td><input type="time" class="form-control form-control-sm end" value="${d.end}"></td><td class="startS text-white text-center small"></td><td class="endS text-white text-center small"></td><td class="dur text-center text-white fw-bold"></td><td class="laps text-center text-info fw-bold">${d.laps}</td><td class="fuel text-center text-warning fw-bold">${d.fuel}</td><td class="inc-cell text-center" style="color:#aaa;">0x</td><td class="neu-cell text-center"><input class="form-control form-control-sm avg-input" placeholder="%" style="width:45px;background:transparent;border:none;text-align:center;color:#aaa;cursor:pointer;"><div class="tire-tooltip"><div class="car-schema"><div class="tire-box tire-fl">--</div><div class="chassis-line"></div><div class="tire-box tire-fr">--</div><div class="tire-box tire-rl">--</div><div class="tire-box tire-rr">--</div></div></div></td><td class="pit text-white text-center small">${d.pit}</td><td><input class="form-control form-control-sm notes" value="${d.notes}"></td><td><button class="btn btn-sm btn-outline-danger border-0 del"><i class="fas fa-trash"></i></button></td>`;
+        tr.querySelector('.del').onclick = function() { tr.remove(); renumRelay(); recalcRelayTotals(); refreshPilotOptions(); markDirty(); };
+        document.querySelector('#tblRelay tbody').appendChild(tr); renumRelay(); recalcRelayTotals(); refreshPilotOptions(); monitorStints();
+      }
+
+      function recalcRelayTotals() {
+        const startL = toSecFlex(document.getElementById('raceStartLocal').value);
+        const startS = toSecFlex(document.getElementById('raceStartServer').value);
+        const raceDur = getRaceDurationSeconds();
+        const raceLimitLinear = startL + raceDur;
+        const diff = startS - startL;
+        const lapGlobal = toSecHMS(document.getElementById('lapTimeGlobal').value);
+        const tank = parseFloat(document.getElementById('tankSize').value);
+        const cons = parseFloat(document.getElementById('consLap').value);
+        const pitLossTotal = parseFloat(document.getElementById('pitLossTime').value) || 0;
+        let totLaps = 0, totFuel = 0, totTime = 0; const driverSum = {};
+        const rows = document.querySelectorAll('#tblRelay tbody tr');
+        let dayOffset = 0; let lastStart = -1;
+        rows.forEach((tr, i) => {
+           if (tr.style.display === 'none') return;
+           let s = toSecFlex(tr.querySelector('.start').value);
+           if (lastStart !== -1 && s < (lastStart - 43200)) dayOffset += 86400; lastStart = s;
+           let linearStart = s + dayOffset;
+           if (linearStart >= raceLimitLinear) { tr.remove(); return; }
+           let e = toSecFlex(tr.querySelector('.end').value); let dur = e - s; if (dur < 0) dur += 86400;
+           let linearEnd = linearStart + dur;
+           if (linearEnd > raceLimitLinear) {
+               let remaining = raceLimitLinear - linearStart; dur = remaining;
+               tr.querySelector('.end').value = secToHHMM((linearStart + dur) % 86400);
+               const p = pilotState.find(x => x.name.toLowerCase() === tr.querySelector('.driver').value.trim().toLowerCase());
+               const pace = p ? p.lapSec : lapGlobal;
+               let loss = pitLossTotal; if(i === 0 || i === rows.length - 1) loss /= 2;
+               let effectiveTime = Math.max(0, dur - loss);
+               tr.querySelector('.laps').textContent = (pace > 0) ? Math.floor(effectiveTime / pace) : 0;
+               tr.querySelector('.notes').value = "Bandera a Cuadros 🏁"; tr.classList.add('stint-checker');
+           } else tr.classList.remove('stint-checker');
+           tr.querySelector('.dur').textContent = secToHHMM(dur);
+           tr.querySelector('.startS').textContent = secToHHMM(s + diff);
+           tr.querySelector('.endS').textContent = secToHHMM(toSecFlex(tr.querySelector('.end').value) + diff);
+           let l = parseInt(tr.querySelector('.laps').textContent);
+           let f = tank; if (i === rows.length - 1 || linearEnd >= raceLimitLinear) f = Math.min(tank, Math.ceil((l + 1) * cons));
+           tr.querySelector('.fuel').textContent = f;
+           totLaps += l; totFuel += f; totTime += dur;
+           const drvName = tr.querySelector('.driver').value.trim();
+           driverSum[drvName] = (driverSum[drvName] || 0) + dur;
+        });
+        document.getElementById('ftRelayLaps').textContent = totLaps;
+        document.getElementById('ftRelayFuel').textContent = totFuel;
+        document.getElementById('ftRelayDur').textContent = secToHHMM(totTime);
+        document.getElementById('statTotalLaps').textContent = totLaps;
+        document.getElementById('statStints').textContent = document.querySelectorAll('#tblRelay tbody tr').length;
+        const sumHTML = Object.entries(driverSum).map(([n, t]) => `<span style="color:var(--lec-lime)">${n || '?'}</span>: ${secToHHMM(t)}`).join(' | ');
+        document.getElementById('relayByDriver').innerHTML = sumHTML || '-';
+        renumRelay();
+      }
+
+      function generateRelays() {
+        const durMode = document.getElementById('raceDurationMode').value;
+        const startL = toSecFlex(document.getElementById('raceStartLocal').value);
+        const durationSeconds = getRaceDurationSeconds();
+        const endTimeTargetLinear = startL + durationSeconds;
+        const totalLapsTarget = (durMode === 'laps') ? parseInt(document.getElementById('raceDuration').value || 0) + parseInt(document.getElementById('extraLaps').value || 0) : 999999;
+        const lapsPerStint = calcLapsPerStint(); if (lapsPerStint <= 0) return alert('Revisa consumo/tanque');
+        document.querySelector('#tblRelay tbody').innerHTML = '';
+        let accLaps = 0; let currTime = startL; let currTimeLinear = startL;
+        const pitTime = toSecFlex(document.getElementById('pitService').value);
+        const cons = parseFloat(document.getElementById('consLap').value);
+        const tank = parseFloat(document.getElementById('tankSize').value);
+        const lapGlobal = toSecHMS(document.getElementById('lapTimeGlobal').value);
+        const pitLossTotal = parseFloat(document.getElementById('pitLossTime').value) || 0;
+        let i = 0; let pilotIdx = 0; let currentStintsDone = 0;
+        while (i < 100) {
+           if (durMode === 'time' && currTimeLinear >= endTimeTargetLinear) break;
+           if (durMode === 'laps' && accLaps >= totalLapsTarget) break;
+           let pilot = (pilotState.length > 0) ? pilotState[pilotIdx % pilotState.length] : null;
+           const pace = (pilot && pilot.lapSec > 0) ? pilot.lapSec : lapGlobal;
+           let laps = lapsPerStint; if (durMode === 'laps') laps = Math.min(lapsPerStint, totalLapsTarget - accLaps);
+           let loss = pitLossTotal; if(i === 0) loss /= 2;
+           const stintSec = (laps * pace) + loss;
+           const s = currTime; const e = (s + stintSec) % 86400;
+           let f = tank; if (durMode === 'laps' && accLaps + laps >= totalLapsTarget) f = Math.min(tank, Math.ceil((laps + 1) * cons));
+           addRelayRow({ driver: pilot ? pilot.name : '', start: secToHHMM(s), end: secToHHMM(e), laps: laps, fuel: f, pit: secToHHMMSS(pitTime), notes: 'Stint ' + (i + 1) });
+           const step = stintSec + pitTime; currTime = (currTime + step) % 86400; currTimeLinear += step; accLaps += laps; i++;
+           if (pilot) { currentStintsDone++; if (currentStintsDone >= (pilot.stints || 1)) { pilotIdx++; currentStintsDone = 0; } }
+        }
+        recalcRelayTotals(); markDirty();
+      }
+
+      document.getElementById('btnGenerateFull').onclick = generateRelays;
+      document.getElementById('btnClearRelays').onclick = () => { if (confirm('¿Limpiar?')) { document.querySelector('#tblRelay tbody').innerHTML = ''; recalcRelayTotals(); markDirty(); } };
+      document.getElementById('btnAddRelay').onclick = () => addRelayRow({});
+      
+      document.getElementById('btnCopyRelay').onclick = ()=>{
+        const rows = Array.from(document.querySelectorAll('#tblRelay tbody tr')).map((tr,i)=>{
+          const d = tr.querySelector('.driver').value||'Sin Asignar';
+          const s = tr.querySelector('.start').value||'00:00';
+          const e = tr.querySelector('.end').value||'00:00';
+          const laps = tr.querySelector('.laps').textContent;
+          const fuel = tr.querySelector('.fuel').textContent;
+          return `**Stint ${i+1}** | ${s} - ${e} | **${d}** | ${laps}v | ${fuel}L`;
+        });
+        const head = `🏁 **PLAN DE CARRERA - ${document.getElementById('carName').value}**\n`;
+        navigator.clipboard.writeText(head + rows.join('\n')).then(()=> alert('Copiado!'));
+      };
+
+      async function collectPayload() {
+         const params = {};
+         ['raceStartLocal', 'raceDuration', 'raceEndLocal', 'raceStartServer', 'raceEndServer', 'pitService', 'tankSize', 'consLap', 'extraLaps', 'lapTimeGlobal', 'raceDurationMode', 'pitLossTime']
+         .forEach(k => { if(document.getElementById(k)) params[k] = document.getElementById(k).value; });
+         const relays = [];
+         document.querySelectorAll('#tblRelay tbody tr').forEach(tr => {
+            relays.push({
+               driver: tr.querySelector('.driver').value,
+               start: tr.querySelector('.start').value,
+               end: tr.querySelector('.end').value,
+               laps: tr.querySelector('.laps').textContent,
+               fuel: tr.querySelector('.fuel').textContent,
+               pit: tr.querySelector('.pit').textContent,
+               notes: tr.querySelector('.notes').value
+            });
+         });
+         return { params, pilots: pilotState, relays };
+      }
+
+      async function performSave(forceNew = false) {
+         let name = currentLoadedName; let url = '/estrategia/guardar';
+         if (!currentLoadedId || forceNew) {
+             const defaultName = forceNew ? (currentLoadedName + " (Copia)") : "Plan A";
+             name = prompt("Nombre de la nueva estrategia:", defaultName);
+             if (!name) return;
+             url = '/estrategia/guardar';
+         } else url = '/estrategia/actualizar/' + currentLoadedId;
+         const payload = await collectPayload();
+         try {
+             const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: name, car_class: document.getElementById('carClass').value, car_name: document.getElementById('carName').value, payload }) });
+             const result = await res.json();
+             if (result.ok) {
+                 markClean();
+                 document.getElementById('btnSaveStrategy').classList.add('btn-success');
+                 document.getElementById('saveBtnText').textContent = "¡GUARDADO!";
+                 setTimeout(() => { location.reload(); }, 500);
+             } else alert('Error: ' + result.error);
+         } catch (e) { alert("Error de conexión."); }
+      }
+
+      document.getElementById('btnSaveStrategy').onclick = () => performSave(false);
+      document.getElementById('btnSaveAsNew').onclick = (e) => { e.preventDefault(); performSave(true); };
+      document.getElementById('btnLoadStrategy').onclick = () => { const id = document.getElementById('savedStrategies').value; if (!id) return; loadStrategyById(id); };
+
+      async function loadStrategyById(id) {
+        if (!id) return;
+        try {
+          const res = await fetch('/estrategia/cargar/' + id);
+          const d = await res.json();
+          currentLoadedId = d.id;
+          currentLoadedName = d.name;
+          let payload = d.payload;
+          if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch(e) {} }
+          const p = payload.params || {};
+          ['raceStartLocal', 'raceDuration', 'raceEndLocal', 'raceStartServer', 'raceEndServer', 'pitService', 'tankSize', 'consLap', 'extraLaps', 'lapTimeGlobal', 'raceDurationMode', 'pitLossTime']
+          .forEach(k => { if(document.getElementById(k)) document.getElementById(k).value = p[k]; });
+          if(d.car_class) { carClass.value = d.car_class; filterCars(); }
+          if(d.car_name) carName.value = d.car_name;
+          pilotState.length = 0;
+          (payload.pilots || []).forEach(x => pilotState.push({ name: x.name, lapSec: toSecHMS(x.laptime), stints: x.stints || 1, id: x.id || '' }));
+          renderPilotTable();
+          document.querySelector('#tblRelay tbody').innerHTML = '';
+          (payload.relays || []).forEach(r => addRelayRow(r));
+          updateRaceTimes(); recalcRelayTotals(); markClean();
+          document.getElementById('saveBtnText').textContent = "Guardar";
+          setTimeout(() => { document.getElementById('planCarreraCard').scrollIntoView({ behavior: 'smooth' }); }, 300);
+        } catch (err) { console.error(err); alert("Error al cargar"); }
+      }
+
+      document.getElementById('tblStrategies').addEventListener('click', async (ev) => {
+        const btn = ev.target.closest('button'); if (!btn) return;
+        const row = btn.closest('tr');
+        if (btn.classList.contains('btn-strategy-load')) { await loadStrategyById(row.dataset.id); alert('Cargada!'); }
+        else if (btn.classList.contains('btn-strategy-delete')) { if (confirm('¿Borrar?')) { const res = await fetch('/estrategia/borrar/' + row.dataset.id, { method: 'POST' }); if ((await res.json()).ok) row.remove(); } }
+      });
+
+      renderPilotTable(); updateRaceTimes(); refreshPilotOptions();
+      setInterval(monitorStints, 60000); monitorStints();
+    });
+</script>
+</body>
+</html>

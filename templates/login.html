@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Legacy Hub · Login</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { background: #0a0a0a; color: white; font-family: 'Roboto', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; 
+               background-image: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}"); background-size: cover; }
+        .login-card { background: rgba(0,0,0,0.85); padding: 40px; border-radius: 12px; border: 1px solid #333; width: 100%; max-width: 350px; text-align: center; backdrop-filter: blur(10px); }
+        h1 { font-family: 'Teko'; font-size: 3rem; margin: 0; color: white; line-height: 1; text-transform: uppercase; }
+        span { color: #FF5A00; }
+        input { width: 100%; padding: 12px; margin: 10px 0; background: #222; border: 1px solid #444; color: white; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #FF5A00; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; font-family: 'Teko'; font-size: 1.4rem; text-transform: uppercase; margin-top: 10px; }
+        button:hover { background: white; color: black; }
+        .links { margin-top: 20px; font-size: 0.9rem; }
+        a { color: #888; text-decoration: none; }
+        a:hover { color: #CCFF00; }
+        .alert { background: rgba(255, 90, 0, 0.2); color: #FF5A00; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 0.9rem; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Legacy <span>Hub</span></h1>
+        <p style="color:#888; margin-bottom:30px;">Acceso Restringido</p>
+        
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="text" name="username" placeholder="Usuario" required autofocus>
+            <input type="password" name="password" placeholder="Contraseña" required>
+            <button type="submit">Entrar</button>
+        </form>
+        
+        <div class="links">
+            <p>¿No tienes cuenta? <a href="{{ url_for('register') }}">Solicitar Acceso</a></p>
+            <p><a href="{{ url_for('index') }}">Volver al Inicio</a></p>
+        </div>
+    </div>
+</body>
+</html>

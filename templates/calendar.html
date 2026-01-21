@@ -1,0 +1,311 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Legacy eSports · Season Calendar</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+<link rel="manifest" href="{{ url_for('manifest') }}">
+  <meta name="theme-color" content="#FF5A00">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register("{{ url_for('service_worker') }}")
+        .then(reg => console.log('SW registrado: ', reg.scope))
+        .catch(err => console.log('SW error: ', err));
+      });
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/flatpickr.min.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/dark.css">
+
+  <style>
+    :root {
+      --lec-orange: #FF5A00; --lec-lime: #CCFF00;
+      --carbon: #0a0a0a; --glass: rgba(20, 20, 20, 0.9);
+      --border: rgba(255, 255, 255, 0.15);
+      --input-bg: rgba(0, 0, 0, 0.5);
+    }
+    body {
+      background-color: var(--carbon); color: #f5f5f5;
+      font-family: 'Roboto', sans-serif; margin: 0; min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+    .bg-container {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+        background: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}") no-repeat center center/cover;
+    }
+    .bg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); }
+    
+    header {
+      padding: 20px 40px; display: flex; justify-content: space-between; align-items: center;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); border-bottom: 1px solid var(--border);
+    }
+    .brand { font-family: 'Teko', sans-serif; font-size: 2rem; text-transform: uppercase; color: white; display:flex; gap:10px; align-items:center;}
+    .btn-back { color: var(--lec-lime); border: 1px solid var(--lec-lime); padding: 5px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+    
+    main { max-width: 1800px; margin: 30px auto; width: 100%; padding: 0 20px; display: grid; grid-template-columns: 1fr; gap: 20px; }
+    
+    .week-filter { grid-column: 1 / -1; display: flex; gap: 5px; flex-wrap: wrap; justify-content: center; margin-bottom: 10px; }
+    .btn-week {
+        background: transparent; border: 1px solid var(--border); color: #888;
+        padding: 5px 15px; border-radius: 20px; cursor: pointer; font-weight: bold; font-size: 0.9rem; transition: 0.2s;
+    }
+    .btn-week:hover { border-color: var(--lec-lime); color: white; }
+    .btn-week.active { background: var(--lec-lime); color: black; border-color: var(--lec-lime); }
+
+    .add-panel { grid-column: 1 / -1; background: var(--glass); border: 1px solid var(--border); border-radius: 12px; padding: 20px; display: flex; gap: 15px; align-items: flex-start; flex-wrap: wrap; margin-bottom: 20px;}
+    .form-group { display: flex; flex-direction: column; gap: 5px; flex: 1; min-width: 140px; }
+    label { font-size: 0.75rem; text-transform: uppercase; color: #aaa; font-weight: bold;}
+    input, select { padding: 8px; background: var(--input-bg); border: 1px solid var(--border); color: white; border-radius: 4px; }
+    .btn-add { background: var(--lec-orange); border: none; color: white; padding: 10px 20px; border-radius: 4px; font-weight: bold; cursor: pointer; text-transform: uppercase; font-family: 'Teko'; font-size: 1.1rem; height: 38px; align-self: flex-end;}
+    
+    .multi-select-container {
+        height: 80px; overflow-y: auto; background: var(--input-bg);
+        border: 1px solid var(--border); border-radius: 4px; padding: 5px;
+    }
+    .driver-option { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; font-size: 0.85rem; }
+    .driver-option input { width: auto; margin: 0; cursor: pointer; }
+    .driver-option:hover { background: rgba(255,255,255,0.1); }
+
+    .flatpickr-calendar { background: #1a1a1a; border: 1px solid var(--lec-orange); box-shadow: 0 0 15px rgba(0,0,0,0.8); }
+    .flatpickr-day.selected, .flatpickr-day.startRange, .flatpickr-day.endRange { background: var(--lec-orange) !important; border-color: var(--lec-orange) !important; color: white; }
+    .flatpickr-day:hover { background: #333; }
+    .flatpickr-months .flatpickr-month { background: #111; color: var(--lec-lime); fill: var(--lec-lime); }
+    .flatpickr-current-month .flatpickr-monthDropdown-months { background: #111; }
+    .flatpickr-weekdays { background: #111; }
+    span.flatpickr-weekday { color: #888; }
+
+    .cols-container { grid-column: 1 / -1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; }
+    @media(max-width: 1200px) { .cols-container { grid-template-columns: 1fr 1fr; } }
+    @media(max-width: 700px) { .cols-container { grid-template-columns: 1fr; } }
+
+    .col-card { background: rgba(20,20,20,0.6); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; display: flex; flex-direction: column; height: 75vh; }
+    .col-header { padding: 15px; text-align: center; text-transform: uppercase; font-family: 'Teko'; font-size: 1.5rem; letter-spacing: 1px; color: black; font-weight: bold;}
+    .header-special { background: linear-gradient(45deg, #FFD700, #FFA500); }
+    .header-enduro { background: linear-gradient(45deg, #FF5A00, #FF2200); color: white; }
+    .header-daily { background: linear-gradient(45deg, #CCFF00, #99CC00); }
+    .header-private { background: linear-gradient(45deg, #9b59b6, #8e44ad); color: white; }
+
+    .event-list { padding: 15px; display: flex; flex-direction: column; gap: 10px; overflow-y: auto; flex: 1; }
+    .event-item { background: rgba(255,255,255,0.05); padding: 12px; border-radius: 6px; border-left: 4px solid #555; position: relative; transition: opacity 0.3s; }
+    .event-item:hover { background: rgba(255,255,255,0.1); }
+    
+    .event-item.type-Special { border-left-color: #FFD700; }
+    .event-item.type-Endurance { border-left-color: #FF5A00; }
+    .event-item.type-Series { border-left-color: #CCFF00; }
+    .event-item.type-Private { border-left-color: #9b59b6; }
+
+    .ev-week-badge { position: absolute; top: 10px; right: 35px; font-size: 0.75rem; background: #333; padding: 2px 6px; border-radius: 4px; color: #ccc; }
+    .ev-title { font-weight: bold; font-size: 1.1rem; margin-bottom: 2px; }
+    .ev-meta { font-size: 0.85rem; color: #bbb; display: flex; gap: 10px; align-items: center; margin-top: 2px; }
+    .ev-track { color: var(--lec-lime); font-weight: 500;}
+    
+    .del-ev { position: absolute; top: 10px; right: 10px; background: transparent; border: none; color: #666; cursor: pointer; }
+    .del-ev:hover { color: #ff4444; }
+
+    .private-driver { display: flex; align-items: center; gap: 10px; margin-top: 8px; padding-top: 8px; border-top: 1px solid rgba(255,255,255,0.1); }
+    .p-avatar { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; border: 1px solid #9b59b6; }
+    .p-name { font-size: 0.9rem; color: white; }
+    
+    .ev-broadcast { font-size: 0.75rem; color: #9b59b6; margin-top: 5px; font-weight: bold; }
+
+    .hidden { display: none; }
+
+  </style>
+</head>
+<body>
+  <div class="bg-container"><div class="bg-overlay"></div></div>
+  
+  <header>
+    <div class="brand"><i class="fas fa-calendar-alt"></i> Season <span>Calendar</span></div>
+    <a href="{{ url_for('index') }}" class="btn-back"><i class="fas fa-arrow-left"></i> Volver</a>
+  </header>
+
+  <main>
+    <div class="week-filter" id="weekFilters">
+        <button class="btn-week active" data-week="all">TODAS</button>
+        {% for w in range(1, 13) %}
+        <button class="btn-week" data-week="{{ w }}">W{{ w }}</button>
+        {% endfor %}
+    </div>
+
+    <form class="add-panel" method="POST">
+        <div class="form-group" style="max-width: 150px;">
+            <label>Tipo</label>
+            <select name="type" id="eventTypeSelect">
+                <option value="Private">🏆 Campeonato Privado</option>
+                <option value="Special">🌟 Evento Especial</option>
+                <option value="Endurance">🏁 Endurance Oficial</option>
+                <option value="Series">🏎️ Serie Semanal</option>
+            </select>
+        </div>
+        <div class="form-group" style="max-width: 100px;">
+            <label>Semana</label>
+            <select name="week">
+                <option value="0">-</option>
+                {% for w in range(1, 13) %}
+                <option value="{{ w }}">W{{ w }}</option>
+                {% endfor %}
+            </select>
+        </div>
+        <div class="form-group">
+            <label>Nombre</label>
+            <input type="text" name="name" required placeholder="Ej. LNE Ronda 1">
+        </div>
+        <div class="form-group">
+            <label>Circuito</label>
+            <input type="text" name="track" required placeholder="Ej. Spa Francorchamps">
+        </div>
+        <div class="form-group">
+            <label>Fecha(s)</label>
+            <input type="text" name="date_str" id="datePicker" required placeholder="Selecciona días...">
+        </div>
+        <div class="form-group">
+            <label>Hora/Coche</label>
+            <input type="text" name="time_str" placeholder="Ej. 22:00 GMT / GT3">
+        </div>
+        
+        <div class="form-group" style="min-width: 200px;">
+            <label>Links Retransmisión (Opcional)</label>
+            <input type="text" name="broadcast" placeholder="Twitch: xxx | YT: xxx">
+        </div>
+
+        <div class="form-group" id="driverSelectGroup" style="min-width: 200px;">
+            <label>Pilotos Asignados (Multi)</label>
+            <div class="multi-select-container">
+                {% for d in drivers %}
+                <label class="driver-option">
+                    <input type="checkbox" name="driver_ids" value="{{ d.id }}">
+                    <span>{{ d.name }}</span>
+                </label>
+                {% endfor %}
+            </div>
+        </div>
+
+        <button type="submit" class="btn-add"><i class="fas fa-plus"></i></button>
+    </form>
+
+    <div class="cols-container">
+        <div class="col-card">
+            <div class="col-header header-special"><i class="fas fa-trophy"></i> Especiales</div>
+            <div class="event-list">
+                {% for ev in specials %}
+                <div class="event-item type-Special" data-week="{{ ev.week }}">
+                    {% if ev.week > 0 %}<span class="ev-week-badge">W{{ ev.week }}</span>{% endif %}
+                    <div class="ev-title">{{ ev.name }}</div>
+                    <div class="ev-meta"><i class="fas fa-map-marker-alt ev-track"></i> {{ ev.track }}</div>
+                    <div class="ev-meta"><i class="far fa-clock"></i> {{ ev.date_str }}</div>
+                    {% if ev.car_class %}<div class="ev-meta" style="color:#aaa;">{{ ev.car_class }}</div>{% endif %}
+                    <form action="{{ url_for('delete_event', id=ev.id) }}" method="POST" onsubmit="return confirm('¿Borrar?');">
+                        <button class="del-ev"><i class="fas fa-times"></i></button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-card">
+            <div class="col-header header-enduro"><i class="fas fa-flag-checkered"></i> Endurances</div>
+            <div class="event-list">
+                {% for ev in enduros %}
+                <div class="event-item type-Endurance" data-week="{{ ev.week }}">
+                    <span class="ev-week-badge">W{{ ev.week }}</span>
+                    <div class="ev-title">{{ ev.name }}</div>
+                    <div class="ev-meta"><i class="fas fa-map-marker-alt ev-track"></i> {{ ev.track }}</div>
+                    <div class="ev-meta"><i class="far fa-calendar"></i> {{ ev.date_str }}</div>
+                    <form action="{{ url_for('delete_event', id=ev.id) }}" method="POST" onsubmit="return confirm('¿Borrar?');">
+                        <button class="del-ev"><i class="fas fa-times"></i></button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-card">
+            <div class="col-header header-daily"><i class="fas fa-road"></i> Series</div>
+            <div class="event-list">
+                {% for ev in dailies %}
+                <div class="event-item type-Series" data-week="{{ ev.week }}">
+                    <span class="ev-week-badge">W{{ ev.week }}</span>
+                    <div class="ev-title">{{ ev.name }}</div>
+                    <div class="ev-meta"><i class="fas fa-map-marker-alt ev-track"></i> {{ ev.track }}</div>
+                    <div class="ev-meta"><i class="fas fa-info-circle"></i> {{ ev.date_str }}</div>
+                    <form action="{{ url_for('delete_event', id=ev.id) }}" method="POST" onsubmit="return confirm('¿Borrar?');">
+                        <button class="del-ev"><i class="fas fa-times"></i></button>
+                    </form>
+                </div>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="col-card">
+            <div class="col-header header-private"><i class="fas fa-users-cog"></i> Privadas</div>
+            <div class="event-list">
+                {% for ev in privates %}
+                <div class="event-item type-Private" data-week="{{ ev.week }}">
+                    {% if ev.week > 0 %}<span class="ev-week-badge">W{{ ev.week }}</span>{% endif %}
+                    <div class="ev-title">{{ ev.name }}</div>
+                    <div class="ev-meta"><i class="fas fa-map-marker-alt ev-track"></i> {{ ev.track }}</div>
+                    <div class="ev-meta"><i class="far fa-calendar-alt"></i> {{ ev.date_str }}</div>
+                    
+                    {% if ev.broadcast %}
+                    <div class="ev-broadcast"><i class="fas fa-video"></i> {{ ev.broadcast }}</div>
+                    {% endif %}
+
+                    {% if ev.drivers %}
+                        {% for driver in ev.drivers %}
+                        <div class="private-driver">
+                            <img src="{{ url_for('static', filename='uploads/' + driver.photo) }}" class="p-avatar">
+                            <span class="p-name">{{ driver.name }}</span>
+                        </div>
+                        {% endfor %}
+                    {% endif %}
+                    <form action="{{ url_for('delete_event', id=ev.id) }}" method="POST" onsubmit="return confirm('¿Borrar?');">
+                        <button class="del-ev"><i class="fas fa-times"></i></button>
+                    </form>
+                </div>
+                {% else %}
+                <div style="text-align:center; padding:20px; color:#666;">Añade tu campeonato arriba.</div>
+                {% endfor %}
+            </div>
+        </div>
+    </div>
+
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+  <script src="https://npmcdn.com/flatpickr/dist/l10n/es.js"></script>
+  <script>
+    flatpickr("#datePicker", {
+        mode: "multiple",
+        dateFormat: "d M",
+        locale: "es",
+        conjunction: ", "
+    });
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const buttons = document.querySelectorAll('.btn-week');
+        const events = document.querySelectorAll('.event-item');
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                buttons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                const week = btn.getAttribute('data-week');
+                events.forEach(ev => {
+                    const evWeek = ev.getAttribute('data-week');
+                    if (week === 'all' || evWeek === week) {
+                        ev.classList.remove('hidden');
+                    } else {
+                        ev.classList.add('hidden');
+                    }
+                });
+            });
+        });
+    });
+  </script>
+</body>
+</html>

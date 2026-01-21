@@ -1,0 +1,294 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>LEGACY PIT WALL</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  
+  <meta http-equiv="Content-Security-Policy" content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: content: blob:;">
+
+  <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;600;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/flag-icon-css/6.6.6/css/flag-icons.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+
+  <style>
+    :root { --neon-green: #ccff00; --panel-bg: #0e0e0e; --border-color: #333; --color-orange: #ff9f43; --color-blue: #00cfe8; --color-red: #ff3333; --gold: #d4af37; --silver: #aaa9ad; --bronze: #cd7f32; }
+    body { background-color: #000; color: #eee; font-family: 'Roboto Mono', monospace; height: 100vh; overflow: hidden; margin: 0; display: flex; flex-direction: column; }
+    
+    /* HEADER */
+    header { height: 60px; background: #111; border-bottom: 1px solid #333; display: flex; align-items: center; justify-content: space-between; padding: 0 25px; flex-shrink: 0; }
+    .btn-nav, .btn-load { font-family: 'Teko'; font-size: 1.3rem; padding: 5px 15px; border-radius: 4px; text-decoration: none; cursor: pointer; }
+    .btn-nav { color: #ff3333; border: 1px solid #ff3333; background: rgba(255,51,51,0.1); }
+    .btn-load { color: var(--color-blue); border: 1px solid var(--color-blue); background: rgba(0,207,232,0.1); }
+    .status-box { font-family: 'Teko'; font-size: 1.4rem; color: #888; display: flex; align-items: center; gap: 10px; }
+    .status-dot { width: 12px; height: 12px; border-radius: 50%; background: #444; }
+    .status-dot.online { background: var(--neon-green); box-shadow: 0 0 10px var(--neon-green); }
+
+    /* SESSION BAR */
+    .session-bar { height: 50px; background: #000; border-bottom: 2px solid #333; display: flex; align-items: center; justify-content: center; gap: 40px; font-family: 'Teko'; font-size: 1.6rem; color: #aaa; flex-shrink: 0; }
+    .session-val { color: white; font-weight: bold; font-size: 1.8rem; }
+
+    /* --- LAYOUT 50/50 --- */
+    .main-grid { display: flex; flex: 1; width: 100vw; overflow: hidden; }
+    .module { 
+        width: 50vw; max-width: 50vw; min-width: 50vw; 
+        display: flex; flex-direction: column; 
+        border-right: 1px solid #222; background: var(--panel-bg); overflow: hidden; 
+    }
+
+    /* HUD */
+    .hud-row { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; padding: 10px; background: #0a0a0a; border-bottom: 2px solid #333; flex-shrink: 0; }
+    .hud-card { background: #000; border: 1px solid #222; border-radius: 6px; padding: 5px; text-align: center; }
+    .hud-label { font-size: 0.7rem; color: #666; }
+    .hud-value { font-family: 'Teko'; font-size: 3rem; line-height: 0.9; font-weight: 600; }
+    .val-fuel { color: var(--color-blue); } .fuel-danger { color: var(--color-red); animation: blink 1s infinite; }
+    .val-inc { color: var(--color-red); } .val-inc-max { font-size: 2.2rem; }
+    @keyframes blink { 0%,100%{opacity:1;} 50%{opacity:0.3;} }
+
+    /* TABLAS */
+    .table-responsive { flex: 1; overflow-y: auto; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { position: sticky; top: 0; background: #0e0e0e; z-index: 2; font-size: 0.8rem; color: #888; padding: 8px 4px; border-bottom: 2px solid #333; text-align: center; white-space: nowrap; }
+    td { padding: 4px; font-size: 1.1rem; background: #111; border-bottom: 1px solid #222; vertical-align: middle; height: 45px; text-align: center; white-space: nowrap; }
+    
+    .name-grid { display: grid; grid-template-columns: 20px 40px 20px 1fr; align-items: center; gap: 5px; text-align: left; }
+    .cell-num { text-align: right; font-weight: 700; color: white; font-family: 'Teko'; font-size: 1.2rem; }
+    .cell-name { font-weight: 700; color: #aaa; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    
+    /* COLUMNA PILOTO PLAN CARRERA ANCHO FIJO */
+    .col-pilot { width: 150px; min-width: 150px; max-width: 150px; overflow: hidden; text-overflow: ellipsis; }
+
+    /* BADGES */
+    .strat-badge { padding: 2px 5px; border-radius: 3px; font-weight: bold; font-size: 0.8rem; display: inline-block; min-width: 60px; }
+    .st-lead { background: rgba(204,255,0,0.1); border: 1px solid var(--neon-green); color: var(--neon-green); }
+    .st-lag { background: rgba(255,51,51,0.1); border: 1px solid var(--color-red); color: var(--color-red); }
+    .st-equal { color: #555; font-size: 0.8rem; }
+
+    .row-hero td { background: rgba(204,255,0,0.05) !important; color: white; border-top: 1px solid rgba(204,255,0,0.2); border-bottom: 1px solid rgba(204,255,0,0.2); }
+    .state-pit { color: var(--color-red); font-weight: 900; animation: blink 1s infinite; }
+    .state-out { color: var(--color-blue); font-weight: 900; animation: blink 1.5s infinite; }
+    
+    .pilot-on { color: var(--neon-green); font-weight: bold; }
+    .pilot-off { color: var(--color-red); font-weight: bold; animation: blink 1.5s infinite; }
+    .stint-done { opacity: 0.4; text-decoration: line-through; }
+    .stint-active { background: rgba(204,255,0,0.1) !important; border: 1px solid var(--neon-green); }
+    .stint-storm { color: var(--color-blue) !important; font-weight: bold; text-shadow: 0 0 8px var(--color-blue); }
+    
+    .track-map-container { height: 50px; background: #050505; border-top: 2px solid #333; position: relative; width: 100%; display: flex; align-items: center; padding: 0 20px; flex-shrink: 0; }
+    .track-line { width: 100%; height: 4px; background: #333; position: relative; }
+    .map-dot { position: absolute; top: -8px; width: 20px; height: 20px; background: #444; border-radius: 50%; transform: translateX(-50%); border: 1px solid black; }
+    .map-dot.is-me { background: var(--neon-green); border: 2px solid white; width: 30px; height: 30px; top: -13px; z-index: 10; }
+    .map-dot.is-me img { width: 100%; height: 100%; object-fit: cover; }
+  </style>
+</head>
+<body>
+
+<header>
+    <div style="flex:1"><a href="#" class="btn-nav">VOLVER</a></div>
+    <div style="font-family:'Teko'; font-size:3rem; color:white; letter-spacing:2px;">LEGACY <span style="color:#ccff00">PITWALL</span></div>
+    <div style="flex:1; display:flex; justify-content:flex-end; gap:20px; align-items:center;">
+        <button class="btn-load">CARGAR ESTRATEGIA</button>
+        <div class="status-box"><div id="statusDot" class="status-dot"></div><span id="statusText">DESCONECTADO</span></div>
+    </div>
+</header>
+
+<div class="session-bar">
+    <div>AIR: <span class="session-val" id="weatherAir">--°C</span></div>
+    <div>TRACK: <span class="session-val" id="weatherTrack">--°C</span></div>
+    <div>RAIN: <span class="session-val" id="weatherRain">--%</span></div>
+    <div>STATUS: <span class="session-val" id="weatherStatus">--</span></div>
+</div>
+
+<div class="main-grid">
+    <div class="module">
+        <div class="table-responsive" id="gridContainer">
+            <table class="left-table">
+                <thead>
+                    <tr>
+                        <th width="40">POS</th><th width="40">PIC</th>
+                        <th style="text-align:left; padding-left:10px">PILOTO / COCHE</th>
+                        <th>LAST</th><th>BEST</th><th>GAP</th><th>INT</th>
+                        <th>STRAT</th> <th>ST-1</th><th>ST-2</th><th>ST-3</th>
+                    </tr>
+                </thead>
+                <tbody id="gridBody">
+                    <tr><td colspan="11" style="text-align:center; padding:30px; color:#555;">CONECTANDO CON BRIDGE...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div class="module" style="border-right:none;">
+        <div class="hud-row">
+            <div class="hud-card"><div class="hud-label">TIEMPO</div><div class="hud-value" id="hudTime">--:--:--</div></div>
+            <div class="hud-card"><div class="hud-label">FUEL</div><div class="hud-value val-fuel" id="hudFuel">--.-</div></div>
+            <div class="hud-card"><div class="hud-label">A META</div><div class="hud-value" style="color:var(--color-orange)" id="hudTarget">--</div></div>
+            <div class="hud-card"><div class="hud-label">INCID.</div><div class="hud-value val-inc" id="hudInc">--/--</div></div>
+        </div>
+        
+        <div style="padding:10px; background:#111; border-bottom:1px solid #333; color:#aaa; font-weight:bold; display:flex; justify-content:space-between;">
+            <span>PLAN DE CARRERA</span><span style="color:var(--color-blue)">DEFAULT 24H</span>
+        </div>
+        <div class="table-responsive">
+            <table class="replica-table">
+                <thead>
+                    <tr>
+                        <th width="30">#</th><th class="col-pilot">PILOTO</th>
+                        <th>INICIO</th><th>FIN</th><th>LAPS</th><th>FUEL</th><th>WX</th><th>PIT</th><th>NOTAS</th>
+                    </tr>
+                </thead>
+                <tbody id="strategyBody"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="track-map-container"><div class="track-line" id="trackMapLine"></div></div>
+
+<script>
+    const SIM_DRIVER_ID = 668063; 
+    let connectedPilots = ["Manolo Segovia", "Pepe Lopez"]; 
+    let lastUserScroll = 0;
+    document.getElementById('gridContainer').addEventListener('scroll', () => { lastUserScroll = Date.now(); });
+
+    // --- ESTRATEGIA ---
+    function renderStrategyTable() {
+        const tbody = document.getElementById('strategyBody');
+        tbody.innerHTML = '';
+        const activeIdx = 6; 
+        const drivers = ["Manolo Segovia", "Pepe Lopez", "Juan Martinez", "Valentino Rossi"];
+
+        for(let i=1; i<=15; i++) {
+            if (i < activeIdx - 4) continue;
+            let name = drivers[(i-1)%4];
+            let isConn = connectedPilots.includes(name);
+            let connClass = isConn ? 'pilot-on' : 'pilot-off';
+            let status = "";
+            let wxIcon = "sun";
+            let note = "OK";
+
+            if (i < activeIdx) { status = "stint-done"; } 
+            else if (i === activeIdx) { status = "stint-active"; note = "PUSHING"; } 
+            else if (i === 15) { status = "stint-storm"; wxIcon = "bolt"; note = "STORM"; }
+
+            let pilotDisplay = (i === activeIdx) ? 'TU (NOW)' : name;
+
+            tbody.innerHTML += `<tr class="${status}">
+                <td style="font-weight:bold">${i}</td>
+                <td class="col-pilot ${connClass}" style="text-align:left;">${pilotDisplay}</td>
+                <td>12:00</td><td>12:45</td>
+                <td style="color:var(--color-blue)">28</td>
+                <td style="color:var(--color-orange)">55</td>
+                <td><i class="fas fa-${wxIcon}"></i></td>
+                <td>01:05</td>
+                <td style="color:#aaa">${note}</td>
+            </tr>`;
+        }
+    }
+
+    // --- LIVE TIMING ---
+    function renderGrid(data) {
+        const tbody = document.getElementById('gridBody');
+        tbody.innerHTML = '';
+        const classesPresent = [...new Set(data.map(d => d.c_name))].sort();
+        if(classesPresent.length === 0) classesPresent.push("GT3"); 
+
+        classesPresent.forEach(cls => {
+            tbody.innerHTML += `<tr class="class-separator"><td colspan="11" style="color:#ccff00; border-left:5px solid #ccff00; text-align:left; padding-left:15px">${cls} CLASS</td></tr>`;
+            
+            const drivers = data.filter(c => c.c_name === cls);
+            drivers.forEach((c, index) => {
+                const isMe = c.is_me ? 'row-hero' : '';
+                const picValue = index + 1;
+                let podiumClass = (picValue === 1) ? "pic-p1" : (picValue === 2) ? "pic-p2" : (picValue === 3) ? "pic-p3" : "";
+                
+                let stratBadge = `<span class="st-equal">EQUAL</span>`;
+                if(c.strat_cls === "lead") stratBadge = `<span class="strat-badge st-lead">${c.strat_txt}</span>`;
+                if(c.strat_cls === "lag") stratBadge = `<span class="strat-badge st-lag">${c.strat_txt}</span>`;
+
+                const carLogo = c.car_logo || "iracing";
+                let lastLapClass = 'style="color:var(--neon-green)"'; 
+                if (c.last_lap === "PIT") { lastLapClass = 'class="state-pit"'; } 
+                else if (c.last_lap === "OUT") { lastLapClass = 'class="state-out"'; }
+
+                tbody.innerHTML += `<tr class="${isMe}" id="${c.is_me ? 'myRow' : ''}">
+                    <td style="color:#666">${c.pos}</td>
+                    <td><span class="pic-badge ${podiumClass}">P${picValue}</span></td>
+                    <td><div class="name-grid">
+                        <img src="https://cdn.simpleicons.org/${carLogo}/white" style="width:16px; opacity:0.7">
+                        <div class="cell-num">#${c.num}</div>
+                        <span class="fi fi-${c.flag}"></span>
+                        <div class="cell-name">${c.name}</div>
+                    </div></td>
+                    <td ${lastLapClass}>${c.last_lap}</td>
+                    <td>${c.best_lap}</td>
+                    <td style="color:var(--neon-green)">${c.gap}</td>
+                    <td style="color:#aaa">${c.int}</td>
+                    <td>${stratBadge}</td>
+                    <td style="color:var(--color-orange)">${c.s1}</td>
+                    <td style="color:#666">${c.s2}</td>
+                    <td style="color:#444">${c.s3}</td>
+                </tr>`;
+            });
+        });
+
+        if (Date.now() - lastUserScroll > 10000) {
+            const myRow = document.getElementById('myRow');
+            if(myRow) myRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        }
+    }
+
+    function renderMap(grid) {
+        const container = document.getElementById('trackMapLine');
+        container.innerHTML = '';
+        grid.forEach(car => {
+            const dot = document.createElement('div');
+            dot.className = 'map-dot';
+            dot.style.left = (car.pct * 100) + '%';
+            if (car.is_me) {
+                dot.classList.add('is-me');
+                dot.innerHTML = `<img src="/static/drivers/${SIM_DRIVER_ID}.jpg" onerror="this.style.background='var(--neon-green)'">`; 
+            } else { dot.innerText = car.pos; }
+            container.appendChild(dot);
+        });
+    }
+
+    async function update() {
+        try {
+            const res = await fetch('/api/telemetry/live');
+            const data = await res.json();
+            
+            if (data.connected) {
+                document.getElementById('statusText').innerText = "LIVE DATA";
+                document.getElementById('statusText').style.color = "var(--neon-green)";
+                document.getElementById('statusDot').className = "status-dot online";
+                
+                document.getElementById('hudTime').innerText = data.session_timer || "--:--:--";
+                document.getElementById('hudFuel').innerText = parseFloat(data.my_car.fuel).toFixed(1);
+                document.getElementById('hudTarget').innerText = data.my_car.strat || "OK";
+                document.getElementById('hudInc').innerText = `${data.my_car.incidents}/${data.my_car.inc_limit || 'x'}`;
+                
+                document.getElementById('weatherAir').innerText = data.weather.air + "°C";
+                document.getElementById('weatherTrack').innerText = data.weather.track + "°C";
+                document.getElementById('weatherRain').innerText = data.weather.rain + "%";
+                document.getElementById('weatherStatus').innerText = data.weather.status;
+                
+                if(data.grid && data.grid.length > 0) {
+                    renderGrid(data.grid);
+                    renderMap(data.grid);
+                }
+            } else {
+                document.getElementById('statusText').innerText = "ESPERANDO BRIDGE...";
+                document.getElementById('statusText').style.color = "#666";
+                document.getElementById('statusDot').className = "status-dot";
+            }
+        } catch (e) { console.log("Conectando..."); }
+    }
+
+    renderStrategyTable();
+    setInterval(update, 500); 
+    function openStratModal() { alert("¡Módulo de carga listo!"); }
+</script>
+</body>
+</html>

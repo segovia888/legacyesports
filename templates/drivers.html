@@ -1,0 +1,341 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Legacy eSports Club · Drivers</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+  <link rel="manifest" href="{{ url_for('manifest') }}">
+  <meta name="theme-color" content="#FF5A00">
+
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500;900&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --lec-orange: #FF5A00; --lec-lime: #CCFF00; --carbon: #0a0a0a;
+      --glass: rgba(20, 20, 20, 0.85); --glass-light: rgba(255, 255, 255, 0.05);
+      --border: rgba(255, 255, 255, 0.15);
+    }
+    body { background-color: var(--carbon); color: #f5f5f5; font-family: 'Roboto', sans-serif; min-height: 100vh; display: flex; flex-direction: column; }
+    .bg-container { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1; background: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}") no-repeat center center/cover; filter: brightness(0.4); }
+    
+    .hero { padding: 30px 0; border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.6); backdrop-filter: blur(10px); }
+    .hero h1 { font-family: 'Teko', sans-serif; font-weight: 700; font-size: 3rem; text-transform: uppercase; margin: 0; letter-spacing: 2px; text-shadow: 0 0 20px rgba(255, 90, 0, 0.5); }
+
+    /* CARD PREVIEW */
+    .driver-card { background: var(--glass); border: 1px solid var(--border); border-radius: 12px; overflow: hidden; transition: all 0.3s ease; position: relative; cursor: pointer; }
+    .driver-card:hover { transform: translateY(-5px); box-shadow: 0 10px 30px rgba(255, 90, 0, 0.2); border-color: var(--lec-orange); }
+    .driver-photo-frame { height: 250px; overflow: hidden; position: relative; background: linear-gradient(45deg, #111, #222); }
+    .driver-photo-frame img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.5s; }
+    .driver-card:hover .driver-photo-frame img { transform: scale(1.05); }
+    .driver-number { position: absolute; top: 10px; right: 10px; background: var(--lec-lime); color: black; font-family: 'Teko'; font-size: 1.8rem; font-weight: bold; padding: 0 12px; border-radius: 4px; z-index: 5; }
+    
+    /* BOTÓN EDITAR (IZQUIERDA) */
+    .btn-edit { position: absolute; top: 10px; left: 10px; z-index: 10; width: 35px; height: 35px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.3); background: rgba(0, 0, 0, 0.6); color: white; display: flex; align-items: center; justify-content: center; transition: all 0.2s; }
+    .btn-edit:hover { background: var(--lec-lime); color: black; border-color: var(--lec-lime); }
+
+    .driver-info { padding: 20px; text-align: center; }
+    .driver-name { font-family: 'Teko'; font-size: 2rem; font-weight: 600; text-transform: uppercase; margin-bottom: 5px; color: white; line-height: 1; }
+    .driver-role { color: var(--lec-orange); font-size: 0.9rem; text-transform: uppercase; letter-spacing: 2px; font-weight: bold; margin-bottom: 15px; }
+
+    /* MODAL PERFIL COMPLETO */
+    .modal-content { background: #0f0f0f; border: 1px solid var(--border); color: white; }
+    .modal-header { border-bottom: 1px solid var(--border); background: rgba(0,0,0,0.5); }
+    .btn-close { filter: invert(1); }
+
+    .profile-hero { display: flex; flex-wrap: wrap; }
+    .profile-left { flex: 1; min-width: 300px; background: radial-gradient(circle at center, rgba(255,90,0,0.1) 0%, rgba(0,0,0,1) 100%); border-right: 1px solid var(--border); display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 40px; }
+    .profile-avatar { width: 250px; height: 250px; border-radius: 50%; border: 4px solid var(--lec-orange); overflow: hidden; box-shadow: 0 0 30px rgba(255,90,0,0.3); margin-bottom: 20px; }
+    .profile-avatar img { width: 100%; height: 100%; object-fit: cover; }
+    
+    /* REDES SOCIALES */
+    .social-links { display: flex; gap: 15px; margin-top: 15px; }
+    .social-links a { color: #ccc; font-size: 1.5rem; transition: all 0.2s; }
+    .social-links a:hover { color: var(--lec-lime); transform: scale(1.2); }
+
+    .profile-right { flex: 2; padding: 40px; min-width: 300px; }
+    .profile-name-lg { font-family: 'Teko'; font-size: 4rem; line-height: 0.9; margin-bottom: 10px; text-transform: uppercase; background: -webkit-linear-gradient(#fff, #aaa); -webkit-background-clip: text; -webkit-text-fill-color: transparent; }
+    .profile-meta { display: flex; gap: 20px; margin-bottom: 30px; font-size: 0.9rem; color: var(--lec-lime); text-transform: uppercase; letter-spacing: 1px; }
+    .bio-text { color: #ccc; line-height: 1.6; font-size: 1.1rem; margin-bottom: 40px; border-left: 3px solid var(--lec-orange); padding-left: 20px; white-space: pre-line; }
+
+    /* CAREER HIGHLIGHTS (TEXTO) */
+    .achievements-box { margin-bottom: 30px; }
+    .ach-item { display: flex; align-items: baseline; padding: 8px 0; border-bottom: 1px solid #222; }
+    .ach-year { font-family: 'Teko'; color: var(--lec-lime); font-size: 1.3rem; width: 70px; flex-shrink: 0; }
+    .ach-title { font-weight: 500; color: white; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    /* HALL OF FAME (IMÁGENES) */
+    .palmares-section { background: #050505; padding: 40px; border-top: 1px solid var(--border); }
+    .section-title { font-family: 'Teko'; font-size: 2rem; color: white; border-bottom: 2px solid var(--lec-lime); display: inline-block; margin-bottom: 20px; }
+    
+    .diploma-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 20px; }
+    .diploma-item { position: relative; aspect-ratio: 16/9; cursor: pointer; border: 1px solid #444; overflow: hidden; border-radius: 6px; background: #000; transition: all 0.3s; }
+    .diploma-item img { width: 100%; height: 100%; object-fit: cover; opacity: 0.8; }
+    .diploma-info-overlay { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.85); padding: 8px; color: white; border-top: 1px solid var(--lec-lime); }
+    .diploma-year { font-family: 'Teko'; color: var(--lec-lime); font-size: 1.2rem; line-height: 1; }
+    .diploma-title { font-family: 'Roboto'; font-size: 0.75rem; font-weight: bold; text-transform: uppercase; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .diploma-item:hover { border-color: var(--lec-lime); opacity: 1; transform: translateY(-5px); box-shadow: 0 5px 15px rgba(204,255,0,0.2); }
+
+    /* LIGHTBOX */
+    .lightbox-modal { display: none; position: fixed; z-index: 9999; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.95); align-items: center; justify-content: center; flex-direction: column; }
+    .lightbox-img { max-width: 90%; max-height: 80vh; border: 2px solid var(--lec-lime); box-shadow: 0 0 50px rgba(0,0,0,0.8); }
+    .lightbox-caption { color: white; font-family: 'Teko'; font-size: 2rem; margin-top: 20px; text-transform: uppercase; }
+    .lightbox-close { position: absolute; top: 20px; right: 30px; color: white; font-size: 40px; cursor: pointer; }
+
+    /* FORMS */
+    .form-control, .form-select { background: #111; border: 1px solid #444; color: white; }
+    .form-control:focus { background: #000; border-color: var(--lec-orange); color: white; box-shadow: none; }
+    .nav-tabs .nav-link { color: #aaa; }
+    .nav-tabs .nav-link.active { background: var(--lec-orange); color: white; border: none; }
+  </style>
+</head>
+
+<body>
+  <div class="bg-container"></div>
+
+  <header class="hero">
+    <div class="container d-flex justify-content-between align-items-center">
+      <div>
+        <h1 class="mb-0">LEGACY <span style="color:var(--lec-lime)">DRIVERS</span></h1>
+        <p class="text-white-50 m-0 ls-2">OFICIAL ROSTER & HALL OF FAME</p>
+      </div>
+      <div>
+        <a href="{{ url_for('index') }}" class="btn btn-outline-light me-2">VOLVER</a>
+        {% if current_user.role == 'admin' %}
+        <button class="btn btn-primary" data-bs-toggle="modal" data-bs-target="#addDriverModal"><i class="fas fa-plus"></i> NUEVO PILOTO</button>
+        {% endif %}
+      </div>
+    </div>
+  </header>
+
+  <main class="py-5">
+    <div class="container">
+      {% with messages = get_flashed_messages() %}
+        {% if messages %}<div class="alert alert-info text-center">{{ messages[0] }}</div>{% endif %}
+      {% endwith %}
+
+      <div class="row g-4">
+        {% for driver in drivers %}
+        <div class="col-md-6 col-lg-3">
+          <div class="driver-card" onclick="openProfile('{{ driver.id }}')">
+            {% if current_user.role == 'admin' or current_user.id == driver.user_id %}
+            <button class="btn-edit" onclick="event.stopPropagation(); openEdit('{{ driver.id }}')"><i class="fas fa-pencil-alt"></i></button>
+            {% endif %}
+            <div class="driver-photo-frame">
+              <img src="{{ url_for('static', filename='uploads/' + driver.photo) }}" alt="{{ driver.name }}">
+              {% if driver.number %}<div class="driver-number">#{{ driver.number }}</div>{% endif %}
+            </div>
+            <div class="driver-info">
+              <div class="driver-name">{{ driver.name }}</div>
+              <div class="driver-role"><i class="fas fa-flag me-1"></i> {{ driver.country or 'España' }}</div>
+              <div class="d-flex justify-content-center gap-3 text-secondary small">
+                  {% if driver.iracing_id %}<span><i class="fas fa-id-card text-lime"></i> {{ driver.iracing_id }}</span>{% endif %}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="modal fade" id="profileModal{{ driver.id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-xl modal-dialog-centered">
+                <div class="modal-content overflow-hidden">
+                    <div class="modal-header border-0 p-0 position-absolute end-0 top-0 z-3">
+                        <button type="button" class="btn-close m-3 bg-white" data-bs-dismiss="modal"></button>
+                    </div>
+                    <div class="modal-body">
+                        <div class="profile-hero">
+                            <div class="profile-left">
+                                <div class="profile-avatar"><img src="{{ url_for('static', filename='uploads/' + driver.photo) }}"></div>
+                                
+                                <div class="social-links">
+                                    {% if driver.social_twitter %}<a href="{{ driver.social_twitter }}" target="_blank" title="Twitter"><i class="fab fa-twitter"></i></a>{% endif %}
+                                    {% if driver.social_instagram %}<a href="{{ driver.social_instagram }}" target="_blank" title="Instagram"><i class="fab fa-instagram"></i></a>{% endif %}
+                                    {% if driver.social_twitch %}<a href="{{ driver.social_twitch }}" target="_blank" title="Twitch"><i class="fab fa-twitch"></i></a>{% endif %}
+                                    {% if driver.discord %}<a href="#" title="Discord: {{ driver.discord }}" onclick="alert('Discord: {{ driver.discord }}')"><i class="fab fa-discord"></i></a>{% endif %}
+                                </div>
+                            </div>
+                            
+                            <div class="profile-right">
+                                <div class="profile-name-lg">{{ driver.name }}</div>
+                                <div class="profile-meta">
+                                    <span><i class="fas fa-map-marker-alt"></i> {{ driver.country or 'Legacy HQ' }}</span>
+                                    <span><i class="fas fa-hashtag"></i> {{ driver.number or '00' }}</span>
+                                </div>
+                                
+                                <h5 class="text-uppercase text-secondary mb-3">Biografía</h5>
+                                <div class="bio-text">{{ driver.biography or "Sin biografía disponible." }}</div>
+
+                                <div class="row text-secondary small mb-4">
+                                    <div class="col-6"><strong>SIMS:</strong><br>{{ driver.simulators or '-' }}</div>
+                                    <div class="col-6"><strong>HARDWARE:</strong><br>{{ driver.hardware or '-' }}</div>
+                                </div>
+
+                                {% if driver.achievements %}
+                                <div class="achievements-box">
+                                    <h5 class="text-uppercase text-secondary mb-3"><i class="fas fa-list-ul"></i> Career Highlights</h5>
+                                    {% for ach in driver.achievements %}
+                                    <div class="ach-item">
+                                        <div class="ach-year">{{ ach.year }}</div>
+                                        <div class="ach-title">{{ ach.title }}</div>
+                                    </div>
+                                    {% endfor %}
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+
+                        <div class="palmares-section">
+                            <div class="d-flex justify-content-between align-items-center mb-3">
+                                <div class="section-title mb-0">🏆 HALL OF FAME</div>
+                                <small class="text-muted">Certificados Oficiales</small>
+                            </div>
+                            <div class="diploma-grid">
+                                {% if driver.palmares %}
+                                    {% for palm in driver.palmares %}
+                                        {% if palm.image.lower().endswith('.pdf') %}
+                                            <a href="{{ url_for('static', filename='uploads/' + palm.image) }}" target="_blank" class="text-decoration-none">
+                                                <div class="diploma-item">
+                                                    <div class="d-flex flex-column align-items-center justify-content-center h-100 text-danger" style="background:#1a1a1a;">
+                                                        <i class="fas fa-file-pdf fa-2x mb-1"></i><span class="small">PDF</span>
+                                                    </div>
+                                                    <div class="diploma-info-overlay">
+                                                        <div class="diploma-year">{{ palm.year }}</div>
+                                                        <div class="diploma-title">{{ palm.title_name }}</div>
+                                                    </div>
+                                                </div>
+                                            </a>
+                                        {% else %}
+                                            <div class="diploma-item" onclick="openLightbox('{{ url_for('static', filename='uploads/' + palm.image) }}', '{{ palm.title_name }}')">
+                                                <img src="{{ url_for('static', filename='uploads/' + palm.image) }}">
+                                                <div class="diploma-info-overlay">
+                                                    <div class="diploma-year">{{ palm.year }}</div>
+                                                    <div class="diploma-title">{{ palm.title_name }}</div>
+                                                </div>
+                                            </div>
+                                        {% endif %}
+                                    {% endfor %}
+                                {% else %}
+                                    <div class="text-muted border border-secondary border-dashed p-3 rounded text-center w-100">
+                                        Aún no hay trofeos en el Hall of Fame.
+                                    </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="editModal{{ driver.id }}" tabindex="-1" aria-hidden="true">
+            <div class="modal-dialog modal-lg">
+                <div class="modal-content">
+                    <div class="modal-header"><h5 class="modal-title">EDITAR: {{ driver.name }}</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+                    <div class="modal-body">
+                        <ul class="nav nav-tabs mb-3">
+                            <li class="nav-item"><button class="nav-link active" data-bs-toggle="tab" data-bs-target="#tabGeneral{{ driver.id }}">👤 General</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabBio{{ driver.id }}">📝 Bio & Redes</button></li>
+                            <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabPalmares{{ driver.id }}">🏆 Palmarés</button></li>
+                            {% if driver.user_id %}<li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tabCuenta{{ driver.id }}">🔐 Cuenta</button></li>{% endif %}
+                        </ul>
+
+                        <div class="tab-content">
+                            <div class="tab-pane fade show active" id="tabGeneral{{ driver.id }}">
+                                <form action="{{ url_for('update_driver', id=driver.id) }}" method="POST" enctype="multipart/form-data">
+                                    <div class="row g-3">
+                                        <div class="col-md-6"><label>Nombre</label><input type="text" name="name" class="form-control" value="{{ driver.name }}"></div>
+                                        <div class="col-md-6"><label>País</label><input type="text" name="country" class="form-control" value="{{ driver.country }}"></div>
+                                        <div class="col-md-4"><label>Dorsal</label><input type="text" name="number" class="form-control" value="{{ driver.number }}"></div>
+                                        <div class="col-md-4"><label>ID iRacing</label><input type="text" name="iracing_id" class="form-control" value="{{ driver.iracing_id }}"></div>
+                                        <div class="col-md-4"><label>Discord</label><input type="text" name="discord" class="form-control" value="{{ driver.discord }}"></div>
+                                        <div class="col-12"><label>Foto</label><input type="file" name="photo" class="form-control"></div>
+                                        <div class="col-12"><label>Simuladores</label><input type="text" name="simulators" class="form-control" value="{{ driver.simulators }}"></div>
+                                        <div class="col-12"><label>Hardware</label><input type="text" name="hardware" class="form-control" value="{{ driver.hardware }}"></div>
+                                        <div class="col-12 mt-3"><button type="submit" class="btn btn-primary w-100">GUARDAR</button></div>
+                                    </div>
+                                </form>
+                            </div>
+                            
+                            <div class="tab-pane fade" id="tabBio{{ driver.id }}">
+                                <form action="{{ url_for('update_driver', id=driver.id) }}" method="POST">
+                                    <div class="mb-3"><label>Biografía</label><textarea name="biography" class="form-control" rows="5">{{ driver.biography }}</textarea></div>
+                                    <div class="row g-3">
+                                        <div class="col-md-4"><label>Twitter</label><input type="text" name="social_twitter" class="form-control" value="{{ driver.social_twitter }}"></div>
+                                        <div class="col-md-4"><label>Instagram</label><input type="text" name="social_instagram" class="form-control" value="{{ driver.social_instagram }}"></div>
+                                        <div class="col-md-4"><label>Twitch</label><input type="text" name="social_twitch" class="form-control" value="{{ driver.social_twitch }}"></div>
+                                    </div>
+                                    <button type="submit" class="btn btn-primary w-100 mt-3">GUARDAR BIO</button>
+                                </form>
+                            </div>
+                            
+                            <div class="tab-pane fade" id="tabPalmares{{ driver.id }}">
+                                <div class="row">
+                                    <div class="col-md-6 border-end border-secondary">
+                                        <h6 class="text-lime mb-3">1. Career Highlights (Texto)</h6>
+                                        <form action="{{ url_for('add_achievement', id=driver.id) }}" method="POST" class="row g-2 mb-3">
+                                            <div class="col-3"><input type="text" name="year" class="form-control form-control-sm" placeholder="Año" required></div>
+                                            <div class="col-7"><input type="text" name="title" class="form-control form-control-sm" placeholder="Logro (ej: Ganador Le Mans)" required></div>
+                                            <div class="col-2"><button type="submit" class="btn btn-sm btn-success w-100">+</button></div>
+                                        </form>
+                                        <ul class="list-group list-group-flush small" style="max-height:300px; overflow-y:auto;">
+                                            {% for a in driver.achievements %}
+                                            <li class="list-group-item bg-transparent text-white d-flex justify-content-between border-secondary py-1">
+                                                <span><strong class="text-secondary">{{ a.year }}</strong> {{ a.title }}</span>
+                                                <form action="{{ url_for('delete_achievement', aid=a.id) }}" method="POST"><button class="btn btn-sm text-danger p-0 border-0"><i class="fas fa-times"></i></button></form>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                    
+                                    <div class="col-md-6">
+                                        <h6 class="text-warning mb-3">2. Hall of Fame (Diplomas)</h6>
+                                        <form action="{{ url_for('add_palmares', id=driver.id) }}" method="POST" enctype="multipart/form-data" class="row g-2 mb-3">
+                                            <div class="col-12"><input type="text" name="title" class="form-control form-control-sm" placeholder="Título Oficial" required></div>
+                                            <div class="col-4"><input type="text" name="year" class="form-control form-control-sm" placeholder="Año" required></div>
+                                            <div class="col-8"><input type="file" name="diploma" class="form-control form-control-sm" required></div>
+                                            <div class="col-12"><button type="submit" class="btn btn-sm btn-warning w-100">Subir Diploma</button></div>
+                                        </form>
+                                        <ul class="list-group list-group-flush small" style="max-height:300px; overflow-y:auto;">
+                                            {% for p in driver.palmares %}
+                                            <li class="list-group-item bg-transparent text-white d-flex justify-content-between border-secondary py-1">
+                                                <span>{{ p.title_name }}</span>
+                                                <form action="{{ url_for('delete_palmares', pid=p.id) }}" method="POST"><button class="btn btn-sm text-danger p-0 border-0"><i class="fas fa-trash"></i></button></form>
+                                            </li>
+                                            {% endfor %}
+                                        </ul>
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            {% if driver.user_id %}
+                            <div class="tab-pane fade" id="tabCuenta{{ driver.id }}">
+                                <form action="{{ url_for('update_driver', id=driver.id) }}" method="POST">
+                                    <div class="mb-3"><label>Email</label><input type="email" name="account_email" class="form-control" value="{{ driver.to_dict().email }}"></div>
+                                    <div class="mb-3"><label>Pass</label><input type="password" name="account_password" class="form-control"></div>
+                                    <button type="submit" class="btn btn-primary w-100">Actualizar</button>
+                                </form>
+                            </div>
+                            {% endif %}
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+  </main>
+
+  <div id="lightbox" class="lightbox-modal" onclick="closeLightbox()"><span class="lightbox-close">&times;</span><img id="lightbox-img" class="lightbox-img"><div id="lightbox-caption" class="lightbox-caption"></div></div>
+  
+  <div class="modal fade" id="addDriverModal" tabindex="-1"><div class="modal-dialog"><div class="modal-content"><div class="modal-header"><h5 class="modal-title">Nuevo Piloto</h5><button class="btn-close" data-bs-dismiss="modal"></button></div><div class="modal-body"><form action="{{ url_for('drivers') }}" method="POST" enctype="multipart/form-data"><div class="mb-3"><label>Nombre</label><input type="text" name="name" class="form-control" required></div><div class="mb-3"><label>ID iRacing</label><input type="text" name="iracing_id" class="form-control"></div><div class="mb-3"><label>Discord</label><input type="text" name="discord" class="form-control"></div><div class="mb-3"><label>Foto</label><input type="file" name="photo" class="form-control"></div><button type="submit" class="btn btn-primary w-100">CREAR</button></form></div></div></div></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    function openProfile(id) { new bootstrap.Modal(document.getElementById('profileModal' + id)).show(); }
+    function openEdit(id) { new bootstrap.Modal(document.getElementById('editModal' + id)).show(); }
+    function openLightbox(src, title) { document.getElementById('lightbox-img').src = src; document.getElementById('lightbox-caption').textContent = title; document.getElementById('lightbox').style.display = 'flex'; }
+    function closeLightbox() { document.getElementById('lightbox').style.display = 'none'; }
+  </script>
+</body>
+</html>
