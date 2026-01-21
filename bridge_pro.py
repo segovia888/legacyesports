@@ -13,6 +13,11 @@ class State:
     ir_connected = False
     stint_history = {} 
     current_stint_start = {} 
+    my_last_fuel = None
+    my_last_lap = None
+    my_fuel_samples = []      # últimas N muestras de fuel/lap
+    my_fuel_per_lap = None    # media fuel/lap
+    my_tank_capacity = None   # estimada (L)
 
 def check_iracing(ir, state):
     if state.ir_connected and not (ir.is_initialized and ir.is_connected):
@@ -60,6 +65,44 @@ def get_brand_logo(car_name_raw):
         if "ford" in name: return "ford"
     except: pass
     return "iracing"
+
+def update_my_fuel_model(ir, state, my_idx, max_samples=20):
+    """
+    Calcula consumo medio (L/vuelta) del coche de referencia (tu coche) usando FuelLevel y el avance de vueltas.
+    También estima capacidad de depósito con FuelLevel / FuelLevelPct (si existe).
+    """
+    try:
+        my_lap = safe_int(ir['CarIdxLapCompleted'][my_idx])
+        fuel = safe_float(ir['FuelLevel'])  # iRacing suele exponer FuelLevel para TU coche
+        fuel_pct = None
+        try:
+            fuel_pct = safe_float(ir['FuelLevelPct'])
+        except Exception:
+            fuel_pct = None
+
+        # Estimar capacidad del depósito (si hay FuelLevelPct)
+        if fuel_pct is not None and fuel_pct > 0.01:
+            cap = fuel / fuel_pct
+            if cap > 0:
+                state.my_tank_capacity = cap
+
+        # Calcular consumo por vuelta cuando avanzan las vueltas
+        if state.my_last_fuel is not None and state.my_last_lap is not None:
+            dlaps = my_lap - state.my_last_lap
+            dfuel = state.my_last_fuel - fuel
+            if dlaps > 0 and dfuel > 0:
+                per_lap = dfuel / dlaps
+                state.my_fuel_samples.append(per_lap)
+                if len(state.my_fuel_samples) > max_samples:
+                    state.my_fuel_samples.pop(0)
+                state.my_fuel_per_lap = sum(state.my_fuel_samples) / len(state.my_fuel_samples)
+
+        state.my_last_fuel = fuel
+        state.my_last_lap = my_lap
+
+    except Exception:
+        pass
+
 
 # LÓGICA DE STINTS
 
@@ -160,6 +203,7 @@ def loop(ir, state):
 
             # 3. MI COCHE
             my_idx = ir['DriverInfo']['DriverCarIdx']
+            update_my_fuel_model(ir, state, my_idx)
             fuel_level = safe_float(ir['FuelLevel'])
             
             avg_cons = 3.2
@@ -255,42 +299,80 @@ def loop(ir, state):
                         display_gap = f"+{diff:.3f}"
                         sort_value = raw_best
 
-                # ESTRATEGIA (MATEMÁTICA PURA)
-                strat_txt = "-"
-                strat_cls = "equal"
-                
-                if is_race and idx != my_idx:
-                    # Mis datos
-                    my_hist = state.stint_history.get(my_idx, [])
-                    my_avg = sum(my_hist)/len(my_hist) if len(my_hist) > 0 else 30.0
-                    
-                    # Sus datos
-                    riv_hist = state.stint_history.get(idx, [])
-                    riv_start = state.current_stint_start.get(idx, 0)
-                    riv_curr_lap = safe_int(ir['CarIdxLapCompleted'][idx])
-                    riv_curr_stint = riv_curr_lap - riv_start
-                    
-                    riv_avg = 30.0
-                    if len(riv_hist) > 0: riv_avg = sum(riv_hist)/len(riv_hist)
-                    elif riv_curr_stint > 5: riv_avg = float(riv_curr_stint)
-                    else: riv_avg = my_avg # Asumimos igual si no hay datos
+                # ESTRATEGIA (PARADAS RESTANTES HASTA FINAL — referencia: tu coche)
+strat_txt = "-"
+strat_cls = "equal"
 
-                    # Calculo paradas
-                    my_stops = calculate_stops_remaining(safe_int(ir['CarIdxLapCompleted'][my_idx]), total_laps_est, my_avg)
-                    riv_stops = calculate_stops_remaining(riv_curr_lap, total_laps_est, riv_avg)
-                    
-                    diff_stops = riv_stops - my_stops
-                    seconds_diff = diff_stops * AVG_PIT_LOSS
-                    
-                    if diff_stops != 0:
-                        if seconds_diff > 0:
-                            strat_txt = f"+{seconds_diff:.0f}s"
-                            strat_cls = "lead"
-                        else:
-                            strat_txt = f"{seconds_diff:.0f}s"
-                            strat_cls = "lag"
-                    else:
-                        strat_txt = "EQUAL"
+if is_race and idx != my_idx and total_laps_est and total_laps_est > 0:
+    # --------------------------
+    # 1) Referencia: TU coche
+    # --------------------------
+    my_lap = safe_int(ir['CarIdxLapCompleted'][my_idx])
+    my_laps_left = max(0, total_laps_est - my_lap)
+
+    # Preferimos modelo por combustible (más fiable)
+    my_full_stint = None
+    my_remaining_laps = None
+
+    my_fuel_per_lap = getattr(state, "my_fuel_per_lap", None)
+    my_tank_capacity = getattr(state, "my_tank_capacity", None)
+    my_fuel_level = safe_float(ir['FuelLevel'])
+
+    if my_fuel_per_lap is not None and my_fuel_per_lap > 0.0001:
+        my_remaining_laps = my_fuel_level / my_fuel_per_lap
+        if my_tank_capacity is not None and my_tank_capacity > 0:
+            my_full_stint = my_tank_capacity / my_fuel_per_lap
+
+    # Fallback si todavía no hay consumo suficiente
+    if my_full_stint is None or my_full_stint < 1:
+        my_hist = state.stint_history.get(my_idx, [])
+        my_full_stint = (sum(my_hist) / len(my_hist)) if len(my_hist) > 0 else 30.0
+
+        my_start = state.current_stint_start.get(my_idx, my_lap)
+        my_curr_stint = my_lap - my_start
+        my_remaining_laps = max(0.0, my_full_stint - my_curr_stint)
+
+    # Paradas restantes tuyas: (laps_left - laps_remaining_in_tank) / full_stint
+    my_need = my_laps_left - my_remaining_laps
+    my_stops = math.ceil(my_need / my_full_stint) if my_need > 0 else 0
+
+    # --------------------------
+    # 2) Rival: estimación por historial de stints
+    # --------------------------
+    riv_lap = safe_int(ir['CarIdxLapCompleted'][idx])
+    riv_laps_left = max(0, total_laps_est - riv_lap)
+
+    riv_hist = state.stint_history.get(idx, [])
+    riv_start = state.current_stint_start.get(idx, riv_lap)
+    riv_curr_stint = riv_lap - riv_start
+
+    if len(riv_hist) > 0:
+        riv_full = sum(riv_hist) / len(riv_hist)
+    elif riv_curr_stint > 5:
+        riv_full = float(riv_curr_stint)
+    else:
+        riv_full = my_full_stint  # si no hay datos, asumimos similar a ti
+
+    riv_remaining = max(0.0, riv_full - riv_curr_stint)
+    riv_need = riv_laps_left - riv_remaining
+    riv_stops = math.ceil(riv_need / riv_full) if riv_need > 0 else 0
+
+    # --------------------------
+    # 3) Diferencia (rival - tú)
+    # --------------------------
+    diff_stops = riv_stops - my_stops
+    seconds_diff = diff_stops * AVG_PIT_LOSS
+
+    if diff_stops != 0:
+        if seconds_diff > 0:
+            strat_txt = f"+{seconds_diff:.0f}s"
+            strat_cls = "lead"
+        else:
+            strat_txt = f"{seconds_diff:.0f}s"
+            strat_cls = "lag"
+    else:
+        strat_txt = "EQUAL"
+
 
                 # STINTS FORMATO TEXTO
                 # Calculamos las vueltas del stint actual (ST‑1) y recuperamos el historial de stints completados.
