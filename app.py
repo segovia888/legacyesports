@@ -469,6 +469,37 @@ def estrategia_borrar(sid):
     if s.user_id == current_user.id or current_user.role == 'admin': db.session.delete(s); db.session.commit()
     return jsonify({"ok": True})
 
+@app.route("/estrategia/list")
+@login_required
+def estrategia_list():
+    """
+    Devuelve JSON con las estrategias accesibles al usuario actual.
+    """
+    try:
+        query = Strategy.query.filter(
+            (Strategy.user_id == current_user.id) |
+            ((Strategy.team_id == current_user.team_id) & (Strategy.is_shared == True))
+        ).order_by(Strategy.created_at.desc()).all()
+
+        items = []
+        for s in query:
+            author = ""
+            try:
+                if s.user: author = s.user.username
+            except:
+                author = ""
+            items.append({
+                "id": s.id,
+                "name": s.name,
+                "car_class": s.car_class,
+                "car_name": s.car_name,
+                "created_at": s.created_at.isoformat() if getattr(s, 'created_at', None) else None,
+                "author": author or ""
+            })
+        return jsonify(items)
+    except Exception as e:
+        return jsonify({"error": "No se pudo listar estrategias", "detail": str(e)}), 500
+
 @app.route("/fuel")
 def fuel(): return render_template("fuel_calc.html", cars=Car.query.order_by(Car.category, Car.name).all())
 @app.route("/setup-doctor")
@@ -524,47 +555,82 @@ def manifest(): return send_from_directory('static', 'manifest.json')
 @app.route('/sw.js')
 def service_worker(): return send_from_directory('static', 'sw.js')
 
-# --- TELEMETRÍA ---
+# --- TELEMETRÍA (modificado para incluir track_name y session_type) ---
 telemetry_data = {"connected": False, "laps": 0, "fuel": 0, "driver": "", "flag": "green", "timestamp": 0}
+
 @app.route('/api/telemetry/ingest', methods=['POST'])
 def ingest_telemetry():
     """
-    Receive telemetry data from the bridge and update the server-side
-    telemetry_data dictionary. In addition to setting the connected flag,
-    store a timestamp of the last update so the live timing endpoint can
-    determine if the data is still fresh. Without updating the timestamp
-    the frontend would instantly mark the connection as lost because
-    timestamp would remain at its initial value of 0.
+    Recibe payloads enviados por el bridge y actualiza telemetry_data.
+    Además normaliza/guarda track_name y session_type si vienen en el payload.
     """
     global telemetry_data
     try:
-        data = request.json
-        # merge incoming payload into our telemetry store
+        data = request.json or {}
+        # merge básico
         telemetry_data.update(data or {})
         telemetry_data["connected"] = True
-        # record the current time as the last update to avoid immediate
-        # disconnection in /api/telemetry/live
         telemetry_data["timestamp"] = time.time()
+
+        # Normalizar campos que podrían venir con nombres distintos desde distintos bridges
+        # Prioriza track_name -> track -> Track
+        telemetry_data["track_name"] = (
+            data.get("track_name")
+            or data.get("track")
+            or data.get("Track")
+            or telemetry_data.get("track_name")
+            or ""
+        )
+
+        # Prioriza session_type -> session -> Session
+        telemetry_data["session_type"] = (
+            data.get("session_type")
+            or data.get("session")
+            or data.get("Session")
+            or telemetry_data.get("session_type")
+            or ""
+        )
+
         return jsonify({"status": "ok"})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500
-@app.route('/api/telemetry/live', methods=['GET'])
+        return jsonify({"status": "error", "message": str(e)}), 500@app.route('/api/telemetry/live', methods=['GET'])
 def get_live_telemetry():
     if time.time() - telemetry_data.get("timestamp", 0) > 5: telemetry_data["connected"] = False
     return jsonify(telemetry_data)
 
-# --- ZONA DE DESCARGAS (BRIDGE AUTOMÁTICO) ---
+# --- ENDPOINT: /api/telemetry/live  (añadir si falta) ---
+import time
+from flask import jsonify
+
+@app.route('/api/telemetry/live', methods=['GET'])
+def get_live_telemetry():
+    """
+    Devuelve el estado actual de telemetry_data.
+    Marca connected = False si no hay updates recientes (>5s).
+    Protect: no rompe si telemetry_data no está definido.
+    """
+    try:
+        # Si no existe timestamp o telemetry_data, esto no debe lanzar
+        if time.time() - telemetry_data.get("timestamp", 0) > 5:
+            telemetry_data["connected"] = False
+    except Exception:
+        # telemetry_data no definido o problemas: devolvemos un payload por defecto
+        return jsonify({"connected": False, "timestamp": 0}), 200
+
+    return jsonify(telemetry_data), 200
+# --- fin endpoint ---
+
 @app.route('/client/download/bridge')
 def download_bridge_script():
-    # Código del Bridge v8.6 (El que te pasé antes)
-    # Lo guardamos aquí para inyectarle la URL del servidor automáticamente.
+    """
+    Genera un script cliente (bridge) para iRacing que envía telemetría.
+    He ampliado el payload para intentar extraer track_name y session_type
+    desde distintas estructuras que irsdk suele exponer.
+    """
     bridge_code = f'''import time
 import requests
 import irsdk
-import math
 
-# --- CONFIGURACIÓN AUTOMÁTICA ---
-# Esta URL se ha inyectado desde el servidor al descargar
 SERVER_URL = "{WEB_PUBLIC_URL}/api/telemetry/ingest"
 
 class State:
@@ -578,6 +644,20 @@ def check_iracing(ir, state):
         state.ir_connected = True
         print("✅ iRacing CONECTADO - Enviando datos a Legacy HQ...")
 
+def safe_get(mapping, *keys):
+    """Helper: intenta varias claves y devuelve la primera no-vacía"""
+    try:
+        for k in keys:
+            if isinstance(mapping, dict) and k in mapping and mapping[k]:
+                return mapping[k]
+            # some irsdk objects might be attribute-accessible
+            val = getattr(mapping, k, None)
+            if val:
+                return val
+    except Exception:
+        pass
+    return None
+
 def loop(ir, state):
     ir.freeze_var_buffer_latest()
     if state.ir_connected:
@@ -587,7 +667,7 @@ def loop(ir, state):
             laps = ir['LapCompleted'] or 0
             inc = ir['PlayerCarTeamIncidentCount'] or 0
             on_pit = ir['OnPitRoad']
-            
+
             # 2. Driver Info
             d_id = ir['PlayerCarDriverRaw']
             d_name = "Unknown"
@@ -596,55 +676,85 @@ def loop(ir, state):
                     drivers = ir['SessionInfo']['DriverInfo']['Drivers']
                     info = next((d for d in drivers if d['UserID'] == d_id), None)
                     if info: d_name = info['UserName']
-            except: pass
+            except:
+                pass
 
-            # 3. Neumáticos (Estimación por sectores)
+            # 3. Tires (calc ejemplo)
             tires = {{
-                "fl": int((ir['LFwearL'] + ir['LFwearM'] + ir['LFwearR']) / 3 * 100),
-                "fr": int((ir['RFwearL'] + ir['RFwearM'] + ir['RFwearR']) / 3 * 100),
-                "rl": int((ir['LRwearL'] + ir['LRwearM'] + ir['LRwearR']) / 3 * 100),
-                "rr": int((ir['RRwearL'] + ir['RRwearM'] + ir['RRwearR']) / 3 * 100)
+                "fl": int((ir.get('LFwearL',0) + ir.get('LFwearM',0) + ir.get('LFwearR',0)) / 3 * 100) if 'LFwearL' in ir else 0,
+                "fr": int((ir.get('RFwearL',0) + ir.get('RFwearM',0) + ir.get('RFwearR',0)) / 3 * 100) if 'RFwearL' in ir else 0,
+                "rl": int((ir.get('LRwearL',0) + ir.get('LRwearM',0) + ir.get('LRwearR',0)) / 3 * 100) if 'LRwearL' in ir else 0,
+                "rr": int((ir.get('RRwearL',0) + ir.get('RRwearM',0) + ir.get('RRwearR',0)) / 3 * 100) if 'RRwearL' in ir else 0
             }}
-            tires['avg'] = int((tires['fl'] + tires['fr'] + tires['rl'] + tires['rr']) / 4)
+            tires['avg'] = int((tires['fl'] + tires['fr'] + tires['rl'] + tires['rr']) / 4) if any(tires.values()) else 0
+
+            # --- EXTRA: intentar obtener nombre de pista y tipo de sesión ---
+            track_name = ""
+            session_type = ""
+            try:
+                # intentamos varios accesos seguros según lo que expone irsdk
+                wi = ir.get('WeekendInfo') if isinstance(ir, dict) or hasattr(ir, 'get') else getattr(ir, 'WeekendInfo', None)
+                if wi:
+                    track_name = (wi.get('TrackDisplayName') if isinstance(wi, dict) else getattr(wi, 'TrackDisplayName', None)) or \
+                                 (wi.get('Track') if isinstance(wi, dict) else getattr(wi, 'Track', None)) or ""
+                # fallback directo
+                if not track_name:
+                    track_name = ir.get('TrackDisplayName') if isinstance(ir, dict) else getattr(ir, 'TrackDisplayName', None) or ""
+            except:
+                track_name = ""
+            try:
+                si = ir.get('SessionInfo') if isinstance(ir, dict) or hasattr(ir, 'get') else getattr(ir, 'SessionInfo', None)
+                if si:
+                    # SessionInfo puede contener keys variadas, intentamos las más comunes
+                    session_type = (si.get('SessionType') if isinstance(si, dict) else getattr(si, 'SessionType', None)) or \
+                                   (si.get('Type') if isinstance(si, dict) else getattr(si, 'Type', None)) or ""
+                if not session_type:
+                    session_type = ir.get('Session') if isinstance(ir, dict) else getattr(ir, 'Session', None) or ""
+            except:
+                session_type = ""
 
             # 4. Enviar
             payload = {{
-                "fuel": fuel, "laps": laps, "incidents": inc, "on_pit_road": on_pit,
-                "driver_id": d_id, "driver_name": d_name, "tires": tires, "timestamp": time.time()
+                "fuel": fuel,
+                "laps": laps,
+                "incidents": inc,
+                "on_pit_road": on_pit,
+                "driver_id": d_id,
+                "driver_name": d_name,
+                "tires": tires,
+                "timestamp": time.time(),
+                # campos nuevos
+                "track_name": track_name,
+                "session_type": session_type
             }}
             requests.post(SERVER_URL, json=payload, timeout=1)
-            # print(f"📡 Enviado: {{d_name}} ({{fuel:.1f}}L)")
-
         except Exception:
-            # Cualquier error durante la generación del payload del bridge
-            # no debería detener el bucle principal del cliente.
+            # No queremos que un error en el bridge rompa el bucle
             pass
 
-        # ----------------------------
-        # Código de ejecución del bridge cuando se ejecuta como script independiente.
-        # Esto permite que el archivo generado funcione como cliente stand‑alone.
-        if __name__ == '__main__':
-            ir = irsdk.IRSDK()
-            state = State()
-            print("--- LEGACY BRIDGE CLIENT ---")
-            print(f"🌍 Conectando a: {SERVER_URL}")
-            print("Esperando a iRacing...")
-            try:
-                while True:
-                    check_iracing(ir, state)
-                    loop(ir, state)
-                    time.sleep(1)
-            except KeyboardInterrupt:
-                pass
-
-    '''  # Cierre de la cadena f de bridge_code
+if __name__ == '__main__':
+    ir = irsdk.IRSDK()
+    state = State()
+    print("--- LEGACY BRIDGE CLIENT ---")
+    print(f"🌍 Conectando a: {SERVER_URL}")
+    print("Esperando a iRacing...")
+    try:
+        while True:
+            check_iracing(ir, state)
+            loop(ir, state)
+            time.sleep(1)
+    except KeyboardInterrupt:
+        pass
+'''
     from flask import Response
     return Response(
         bridge_code,
         mimetype='text/x-python',
         headers={'Content-Disposition': 'attachment;filename=legacy_bridge.py'}
     )
-
+# ==========================================
+# FIN BLOQUE LIVE TIMING
+# ==========================================
 # ==========================================
 # BLOQUE LIVE TIMING & PWA (INSERTAR AQUÍ)
 # ==========================================
@@ -669,5 +779,122 @@ def service_worker_js():
 # ==========================================
 # FIN BLOQUE LIVE TIMING
 # ==========================================
+# --- INYECCIÓN: back button + badges TRACK / SESSION colocados en session-bar ---
+from flask import request
+
+@app.after_request
+def inject_live_timing_badges_and_back(response):
+    """
+    Inyecta en /live-timing:
+     - handler para el botón '.btn-nav' (volver a '/')
+     - asegura que existan los badges 'trackNameBadge' y 'sessionTypeBadge'
+       colocados dentro de la .session-bar, justo antes del bloque del AIR.
+    Mantiene la clase 'session-val' para que el estilo coincida con los demás
+    elementos (AIR/TRACK/RAIN/STATUS). Silencioso en caso de error.
+    """
+    try:
+        if request.path == '/live-timing' and response.content_type and 'text/html' in response.content_type.lower():
+            body = response.get_data(as_text=True)
+            injection = r"""
+<script>
+(function(){
+  try {
+    // --- Back button ---
+    var backEl = document.querySelector('a.btn-nav, .btn-nav');
+    if (backEl && !backEl.dataset._legacy_back_injected) {
+      backEl.addEventListener('click', function(e){
+        e.preventDefault();
+        window.location.href = '/';
+      }, {passive: true});
+      backEl.dataset._legacy_back_injected = '1';
+    }
+
+    // --- Ensure badges are inside .session-bar before the AIR block ---
+    function placeBadges() {
+      var sessionBar = document.querySelector('.session-bar');
+      if (!sessionBar) return;
+
+      // Find the AIR container (the div that contains the span#weatherAir)
+      var airSpan = document.getElementById('weatherAir');
+      var insertBeforeNode = null;
+      if (airSpan && airSpan.parentElement && sessionBar.contains(airSpan.parentElement)) {
+        insertBeforeNode = airSpan.parentElement;
+      } else {
+        // fallback: use first child of sessionBar
+        insertBeforeNode = sessionBar.firstElementChild;
+      }
+
+      // Helper: ensure a span with id exists and is wrapped in a div inside sessionBar
+      function ensureWrappedSpan(id, initialText) {
+        var existing = document.getElementById(id);
+        var span;
+        if (existing) {
+          // if it's already a span, reuse it; otherwise (if it's a div), try to find span inside
+          if (existing.tagName.toLowerCase() === 'span') {
+            span = existing;
+          } else {
+            span = existing.querySelector('span#' + id) || existing;
+          }
+        } else {
+          span = document.createElement('span');
+          span.id = id;
+          span.className = 'session-val';
+          span.textContent = initialText;
+        }
+
+        // Ensure wrapper div around span, so layout matches (each item is a div)
+        var wrapper = span.parentElement;
+        if (!wrapper || wrapper.classList.contains('session-bar') || wrapper.tagName.toLowerCase() === 'span') {
+          // create a wrapper
+          wrapper = document.createElement('div');
+          // If span is already in DOM move it into the wrapper, otherwise append
+          if (span.parentElement) {
+            span.parentElement.replaceChild(wrapper, span);
+            wrapper.appendChild(span);
+          } else {
+            wrapper.appendChild(span);
+          }
+        }
+
+        // Make sure span has the session-val class for styling
+        if (!span.classList.contains('session-val')) span.classList.add('session-val');
+
+        // Insert wrapper into sessionBar at correct position if not already there
+        if (!sessionBar.contains(wrapper)) {
+          if (insertBeforeNode) sessionBar.insertBefore(wrapper, insertBeforeNode);
+          else sessionBar.appendChild(wrapper);
+        } else {
+          // If already present but in wrong position, move it before insertBeforeNode
+          if (insertBeforeNode && wrapper.nextSibling !== insertBeforeNode && wrapper !== insertBeforeNode.previousSibling) {
+            sessionBar.insertBefore(wrapper, insertBeforeNode);
+          }
+        }
+        return span;
+      }
+
+      // Use labels inside initial text so UI displays something until telemetry updates
+      ensureWrappedSpan('trackNameBadge', 'TRACK: -');
+      ensureWrappedSpan('sessionTypeBadge', 'SESSION: -');
+    }
+
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+      placeBadges();
+    } else {
+      window.addEventListener('DOMContentLoaded', placeBadges);
+      setTimeout(placeBadges, 200);
+    }
+  } catch (e) {
+    console && console.warn && console.warn('inject_live_timing_badges_and_back error', e);
+  }
+})();
+</script>
+"""
+            if '</body>' in body:
+                body = body.replace('</body>', injection + '</body>')
+                response.set_data(body)
+    except Exception:
+        pass
+    return response
+# --- FIN INYECCIÓN ---
 if __name__ == "__main__":
     app.run(debug=False, host='0.0.0.0', port=5000)
