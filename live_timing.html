@@ -94,8 +94,6 @@
 </header>
 
 <div class="session-bar">
-    <div>AIR: <span id="trackNameBadge">TRACK: -</span></div>
-    <div>AIR: <span id="sessionTypeBadge">SESSION: -</span></div>
     <div>AIR: <span class="session-val" id="weatherAir">--°C</span></div>
     <div>TRACK: <span class="session-val" id="weatherTrack">--°C</span></div>
     <div>RAIN: <span class="session-val" id="weatherRain">--%</span></div>
@@ -275,11 +273,6 @@
                 document.getElementById('weatherTrack').innerText = data.weather.track + "°C";
                 document.getElementById('weatherRain').innerText = data.weather.rain + "%";
                 document.getElementById('weatherStatus').innerText = data.weather.status;
-document.getElementById("sessionTypeBadge").textContent =
-  "SESSION: " + (data.session_type || "-");
-
-document.getElementById("trackNameBadge").textContent =
-  "TRACK: " + (data.track_name || "-");
                 
                 if(data.grid && data.grid.length > 0) {
                     renderGrid(data.grid);
