@@ -1,0 +1,433 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Legacy eSports Club · Engineering Hub</title>
+  
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+  <link rel="manifest" href="{{ url_for('manifest') }}">
+  <meta name="theme-color" content="#FF5A00">
+  
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register("{{ url_for('service_worker') }}")
+        .then(reg => console.log('SW registrado: ', reg.scope))
+        .catch(err => console.log('SW error: ', err));
+      });
+    }
+  </script>
+
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    /* CORRECCIÓN DE MEDIDAS */
+    * { box-sizing: border-box; }
+
+    :root {
+      --lec-orange: #FF5A00;
+      --lec-lime: #CCFF00;
+      --lec-blue: #0070ba; 
+      --carbon: #0a0a0a;
+      --glass: rgba(20, 20, 20, 0.85);
+      --border: rgba(255, 255, 255, 0.15);
+    }
+
+    body {
+      background-color: var(--carbon);
+      color: #f5f5f5;
+      font-family: 'Roboto', sans-serif;
+      margin: 0;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* FONDO */
+    .bg-container {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+        background: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}") no-repeat center center/cover;
+    }
+    .bg-overlay {
+        position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(180deg, rgba(0,0,0,0.6) 0%, rgba(0,0,0,0.95) 100%);
+    }
+
+    /* BARRA SUPERIOR */
+    .top-nav {
+        position: absolute; top: 0; right: 0; width: 100%;
+        padding: 20px 30px; 
+        display: flex; justify-content: flex-end;
+        z-index: 100;
+        pointer-events: none;
+    }
+    .top-nav * { pointer-events: auto; }
+
+    .user-controls { display: flex; align-items: center; gap: 15px; background: rgba(0,0,0,0.6); padding: 5px 15px; border-radius: 30px; border: 1px solid var(--border); backdrop-filter: blur(5px); }
+    .badge-pro {
+        background: #222; color: #fff; font-weight: bold; font-family: 'Teko', sans-serif;
+        padding: 4px 10px; border-radius: 4px; text-transform: uppercase; font-size: 0.9rem; letter-spacing: 1px;
+        border: 1px solid var(--border);
+    }
+    .btn-logout {
+        color: #fff; text-decoration: none; font-size: 0.9rem; transition: 0.2s;
+        display: flex; align-items: center; gap: 5px; opacity: 0.7;
+    }
+    .btn-logout:hover { opacity: 1; color: #ff4444; }
+
+    /* HERO SECTION */
+    .hero {
+        display: flex; align-items: center; gap: 30px; padding: 30px 40px 10px 40px;
+        z-index: 2; max-width: 1400px; margin: 0 auto; width: 100%;
+    }
+    .hero-logo { width: 210px; height: auto; filter: drop-shadow(0 0 15px rgba(0,0,0,0.5)); display: block; }
+    .hero-text { display: flex; flex-direction: column; justify-content: center; }
+    .hero h1 {
+        font-family: 'Teko', sans-serif; font-size: 4rem; line-height: 0.9; margin: 0;
+        text-transform: uppercase; letter-spacing: 2px; color: white;
+        text-shadow: 0 5px 15px rgba(0,0,0,0.5);
+    }
+    .hero h1 span { color: var(--lec-orange); }
+    .hero p { color: #aaa; font-size: 1.1rem; margin-top: 5px; letter-spacing: 3px; text-transform: uppercase; margin-bottom: 0; }
+
+    /* GRID PRINCIPAL */
+    main {
+        max-width: 1400px; margin: 20px auto 40px auto; width: 100%; padding: 0 20px;
+        display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+        gap: 25px; z-index: 2;
+    }
+
+    /* TARJETAS DE HERRAMIENTAS */
+    .tool-card {
+        background: var(--glass); border: 1px solid var(--border); border-radius: 12px;
+        padding: 25px; text-decoration: none; color: white;
+        transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+        display: flex; flex-direction: column; justify-content: space-between;
+        min-height: 220px; position: relative; overflow: hidden; cursor: pointer;
+    }
+    .tool-card:hover { transform: translateY(-7px); border-color: var(--lec-lime); box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .tool-card::before { content: ''; position: absolute; top:0; left:0; width: 100%; height: 4px; background: var(--border); transition: 0.2s; }
+    .tool-card:hover::before { background: var(--lec-lime); }
+
+    .card-header { display: flex; justify-content: space-between; align-items: start; margin-bottom: 15px; }
+    
+    .card-icon { font-size: 2.5rem; color: #444; transition: 0.2s; }
+    .tool-card:hover .card-icon { color: white; transform: scale(1.1); }
+
+    h3 { font-family: 'Teko', sans-serif; font-size: 2rem; margin: 0 0 10px 0; text-transform: uppercase; color: white; line-height: 1; }
+    p { color: #999; font-size: 0.95rem; line-height: 1.5; margin: 0; }
+
+    .btn-action {
+        margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.1);
+        font-size: 1rem; text-transform: uppercase; font-weight: bold;
+        color: var(--lec-lime); display: flex; align-items: center; justify-content: space-between;
+    }
+    .text-success { color: var(--lec-lime) !important; }
+    .text-warning { color: var(--lec-orange) !important; }
+
+    /* --- ESTILOS TARJETAS BLOQUEADAS (PROXIMAMENTE) --- */
+    .card-locked {
+        opacity: 0.6; /* Un poco transparentes */
+        cursor: default; /* El ratón no cambia */
+        border-style: dashed; /* Borde discontinuo */
+    }
+    .card-locked:hover {
+        transform: none; /* No se levantan */
+        box-shadow: none;
+        border-color: var(--border); /* No cambian de color */
+    }
+    .card-locked .card-icon { color: #555; transform: none !important; }
+    .card-locked .btn-action { color: #666; border-color: #333; }
+    .card-locked h3 { color: #aaa; }
+
+    /* --- ANIMACIONES LIVE TIMING (NUEVO) --- */
+    @keyframes pulse {
+        0% { transform: scale(1); opacity: 1; text-shadow: 0 0 0 rgba(255, 51, 51, 0.7); }
+        50% { transform: scale(1.1); opacity: 0.8; text-shadow: 0 0 10px rgba(255, 51, 51, 1); }
+        100% { transform: scale(1); opacity: 1; text-shadow: 0 0 0 rgba(255, 51, 51, 0.7); }
+    }
+    .live-pulse { animation: pulse 2s infinite ease-in-out; color: #ff3333; }
+    .bg-live { background: linear-gradient(135deg, rgba(20,0,0,0.9) 0%, rgba(0,0,0,0.95) 100%) !important; border: 1px solid #331111 !important; }
+    .bg-live:hover { border-color: #ff3333 !important; box-shadow: 0 10px 30px rgba(255, 51, 51, 0.15) !important; }
+
+    /* --- TARJETA SIMUFY --- */
+    .card-simufy {
+        border-color: var(--lec-orange) !important;
+        background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url("{{ url_for('static', filename='img/simufy-bg.png') }}") no-repeat center center/cover;
+    }
+    .card-simufy:hover { box-shadow: 0 10px 30px rgba(255, 90, 0, 0.3); }
+    .card-simufy .badge-pro, .card-simufy .btn-action, .card-simufy h3 { color: var(--lec-orange); border-color: var(--lec-orange); }
+    .card-simufy::before { background: var(--lec-orange); }
+
+    /* --- TARJETA PAYPAL --- */
+    .card-paypal {
+        border-color: var(--lec-blue) !important;
+        background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.9)), url("{{ url_for('static', filename='img/paypal-bg.png') }}") no-repeat center center/cover;
+    }
+    .card-paypal:hover { box-shadow: 0 10px 30px rgba(0, 112, 186, 0.3); }
+    .card-paypal .badge-pro, .card-paypal .btn-action, .card-paypal h3 { color: var(--lec-blue); border-color: var(--lec-blue); }
+    .card-paypal::before { background: var(--lec-blue); }
+
+    /* --- MODALES --- */
+    .modal-overlay {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+        background: rgba(0,0,0,0.85); z-index: 2000;
+        display: none; justify-content: center; align-items: center;
+        backdrop-filter: blur(8px);
+    }
+    .modal-content {
+        background: #111; border-radius: 12px; padding: 30px; width: 90%; max-width: 450px;
+        position: relative; text-align: center; border: 1px solid #333;
+        box-shadow: 0 0 50px rgba(0,0,0,0.5);
+    }
+    .modal-close { position: absolute; top: 15px; right: 15px; cursor: pointer; color: #888; font-size: 1.5rem; transition:0.2s;}
+    .modal-close:hover { color: white; }
+    .modal-title { font-family: 'Teko'; font-size: 2.2rem; margin: 0 0 15px 0; text-transform: uppercase; line-height: 1; }
+    .modal-text { color: #ccc; line-height: 1.6; margin-bottom: 20px; }
+    
+    .highlight-simufy { color: var(--lec-orange); font-weight: bold; }
+    .highlight-paypal { color: var(--lec-blue); font-weight: bold; }
+    
+    .qr-container { background: white; padding: 10px; border-radius: 8px; display: inline-block; margin-bottom: 20px; }
+    .qr-img { width: 180px; height: 180px; display: block; }
+
+    .btn-modal {
+        display: block; width: 100%; padding: 15px; border-radius: 8px;
+        font-family: 'Teko'; font-size: 1.5rem; text-transform: uppercase; font-weight: bold;
+        text-decoration: none; transition: 0.3s; color: white; border: none; cursor: pointer;
+        text-align: center;
+    }
+    .btn-simufy { background: var(--lec-orange); color: black; }
+    .btn-simufy:hover { background: white; box-shadow: 0 0 20px rgba(255, 90, 0, 0.4); }
+    .btn-paypal { background: var(--lec-blue); }
+    .btn-paypal:hover { background: white; color: var(--lec-blue); box-shadow: 0 0 20px rgba(0, 112, 186, 0.4); }
+
+    @media(max-width: 768px) {
+        .hero { flex-direction: column; align-items: flex-start; text-align: center; gap: 10px; padding-top: 60px;}
+        .hero-logo { margin: 0 auto; }
+        .hero-text { width: 100%; }
+        .top-nav { justify-content: center; position: relative; padding: 10px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="bg-container"><div class="bg-overlay"></div></div>
+
+  <div class="top-nav">
+    {% if current_user.is_authenticated %}
+    <div class="user-controls">
+        {% if current_user.role == 'admin' %}
+            <a href="{{ url_for('admin_panel') }}" class="badge-pro" style="background:var(--lec-orange); color:black; text-decoration:none; margin-right:5px;">
+                <i class="fas fa-users-cog"></i> ADMIN
+            </a>
+        {% endif %}
+        
+        <span class="badge-pro" style="color:var(--lec-lime); border-color:var(--lec-lime);">
+            {{ current_user.username }}
+        </span>
+        <div style="width:1px; height:15px; background:#555;"></div>
+        <a href="{{ url_for('logout') }}" class="btn-logout">
+            Salir <i class="fas fa-sign-out-alt"></i>
+        </a>
+    </div>    {% else %}
+    <div class="user-controls" style="border-color:transparent; background:transparent;">
+        <a href="{{ url_for('login') }}" class="btn-logout" style="font-family:'Teko'; font-size:1.1rem; text-transform:uppercase;">
+            <i class="fas fa-lock"></i> Staff Login
+        </a>
+    </div>
+    {% endif %}
+  </div>
+
+  <section class="hero">
+      <img src="{{ url_for('static', filename='img/LeC_blanco_negro.png') }}" alt="Legacy Logo" class="hero-logo">
+      <div class="hero-text">
+          <h1>LEGACY <span>ESPORTS</span></h1>
+          <p>ENGINEERING & STRATEGY DEPARTMENT</p>
+      </div>
+  </section>
+
+  <main>
+    
+    <a href="{{ url_for('fuel') }}" class="tool-card">
+        <div>
+            <div class="card-header"><span class="badge-pro">Calculator</span><i class="fas fa-gas-pump card-icon"></i></div>
+            <h3>Fuel Calc</h3>
+            <p>Calculadora de combustible de precisión.</p>
+        </div>
+        <div class="btn-action">Calcular <i class="fas fa-arrow-right"></i></div>
+    </a>
+
+    <a href="{{ url_for('estrategia') }}" class="tool-card">
+        <div>
+            <div class="card-header"><span class="badge-pro" style="background:#222; color:white;">Planner</span><i class="fas fa-flag-checkered card-icon"></i></div>
+            <h3>Endurances</h3>
+            <p>Planificación de relevos y estrategias.</p>
+        </div>
+        <div class="btn-action">Estrategia <i class="fas fa-arrow-right"></i></div>
+    </a>
+
+    <a href="{{ url_for('live_timing') }}" class="tool-card" style="border-color: #ff3333; box-shadow: 0 0 15px rgba(255, 51, 51, 0.1);">
+        <div>
+            <div class="card-header">
+                <span class="badge-pro" style="background:#ff3333; color:white; animation: pulse 2s infinite;">LIVE</span>
+                <i class="fas fa-stopwatch card-icon" style="color:#ff3333;"></i>
+            </div>
+            <h3 style="color:#ff3333;">Live Timing</h3>
+            <p>Telemetría en tiempo real y muros.</p>
+        </div>
+        <div class="btn-action" style="color:#ff3333; border-top-color: rgba(255,51,51,0.3);">
+            CONECTAR <i class="fas fa-satellite-dish"></i>
+        </div>
+    </a>
+
+    <a href="{{ url_for('setup_doctor') }}" class="tool-card">
+        <div>
+            <div class="card-header"><span class="badge-pro" style="background:#222; color:white;">Analysis</span><i class="fas fa-heartbeat card-icon"></i></div>
+            <h3>Setup Doctor</h3>
+            <p>Diagnóstico de problemas de setup.</p>
+        </div>
+        <div class="btn-action">Diagnosticar <i class="fas fa-arrow-right"></i></div>
+    </a>
+
+    <a href="{{ url_for('drivers') }}" class="tool-card">
+        <div>
+            <div class="card-header">
+                <span class="badge-pro" style="border-color: {% if current_user.is_authenticated %}var(--lec-lime){% else %}var(--lec-orange){% endif %};">
+                    {% if current_user.is_authenticated %}<i class="fas fa-unlock text-success"></i> Abierto{% else %}<i class="fas fa-lock text-warning"></i> Privado{% endif %}
+                </span>
+                <i class="fas fa-id-card card-icon"></i>
+            </div>
+            <h3>Driver Center</h3>
+            <p>Gestión de la plantilla.</p>
+        </div>
+        <div class="btn-action">Gestionar <i class="fas fa-arrow-right"></i></div>
+    </a>
+
+    <a href="{{ url_for('garage') }}" class="tool-card">
+        <div>
+            <div class="card-header"><span class="badge-pro" style="background:#222; color:white;">Database</span><i class="fas fa-warehouse card-icon"></i></div>
+            <h3>Garage Manager</h3>
+            <p>Base de datos de vehículos.</p>
+        </div>
+        <div class="btn-action">Configurar <i class="fas fa-arrow-right"></i></div>
+    </a>
+
+    <a href="{{ url_for('calendar') }}" class="tool-card">
+        <div>
+            <div class="card-header"><span class="badge-pro" style="background:#222; color:white;">Schedule</span><i class="fas fa-calendar-alt card-icon"></i></div>
+            <h3>Season Calendar</h3>
+            <p>Calendario oficial 2026.</p>
+        </div>
+        <div class="btn-action">Ver Calendario <i class="fas fa-arrow-right"></i></div>
+    </a>
+
+    <div class="tool-card card-locked">
+        <div>
+            <div class="card-header">
+                <span class="badge-pro">STORE</span>
+                <i class="fas fa-tshirt card-icon"></i>
+            </div>
+            <h3>Legacy Merch</h3>
+            <p>Camisetas, gorras y equipamiento oficial.</p>
+        </div>
+        <div class="btn-action">PROXIMAMENTE <i class="fas fa-lock"></i></div>
+    </div>
+
+    <div class="tool-card card-locked">
+        <div>
+            <div class="card-header">
+                <span class="badge-pro">3D LAB</span>
+                <i class="fas fa-cubes card-icon"></i>
+            </div>
+            <h3>3D Printing</h3>
+            <p>Accesorios y mods para tu cockpit.</p>
+        </div>
+        <div class="btn-action">PROXIMAMENTE <i class="fas fa-lock"></i></div>
+    </div>
+
+    <div class="tool-card card-simufy" onclick="openModal('simufy')">
+        <div>
+            <div class="card-header">
+                <span class="badge-pro">PARTNER</span>
+                <i class="fas fa-shopping-cart card-icon"></i>
+            </div>
+            <h3>Simufy Shop</h3>
+            <p>Tienda oficial. Apoya al equipo.</p>
+        </div>
+        <div class="btn-action">Ir a la Tienda <i class="fas fa-external-link-alt"></i></div>
+    </div>
+
+    <div class="tool-card card-paypal" onclick="openModal('paypal')">
+        <div>
+            <div class="card-header">
+                <span class="badge-pro">DONATE</span>
+                <i class="fab fa-paypal card-icon"></i>
+            </div>
+            <h3>Web Support</h3>
+            <p>Donaciones para mantenimiento.</p>
+        </div>
+        <div class="btn-action">Donar / Apoyar <i class="fas fa-heart"></i></div>
+    </div>
+
+  </main>
+
+  <footer style="text-align:center; padding:30px; color:#666; font-size:0.8rem; margin-top:auto; border-top: 1px solid var(--border);">
+    Legacy eSports Club 2026 - Etern8 · Creado por Manolo Segovia Torres · v4.0
+  </footer>
+
+  <div id="simufyModal" class="modal-overlay">
+      <div class="modal-content" style="border-color: var(--lec-orange);">
+          <div class="modal-close" onclick="closeModal('simufy')">&times;</div>
+          <h2 class="modal-title" style="color: var(--lec-orange);">Apoya al Equipo</h2>
+          <p class="modal-text">
+              Compra en <strong>Simufy.com</strong> usando nuestro enlace.<br><br>
+              <span class="highlight-simufy">El equipo recibe un 2%</span>.
+          </p>
+          <div class="qr-container">
+              <img src="{{ url_for('static', filename='img/simufy-qr.png') }}" class="qr-img" alt="QR">
+          </div>
+          <a href="https://simufy.com/?ref=Legacy" target="_blank" class="btn-modal btn-simufy">
+              Acceder a Simufy
+          </a>
+      </div>
+  </div>
+
+  <div id="paypalModal" class="modal-overlay">
+      <div class="modal-content" style="border-color: var(--lec-blue);">
+          <div class="modal-close" onclick="closeModal('paypal')">&times;</div>
+          <h2 class="modal-title" style="color: var(--lec-blue);">Mantenimiento</h2>
+          <p class="modal-text">
+              Colabora con los gastos del servidor.<br><br>
+              <span class="highlight-paypal">¡Gracias!</span>
+          </p>
+          <div class="qr-container">
+              <img src="{{ url_for('static', filename='img/paypal-qr.png') }}" class="qr-img" alt="QR">
+          </div>
+          <a href="https://www.paypal.com/donate/?business=FQUK94BY7DQYE&no_recurring=0&item_name=Mantenimiento+del+servidor.&currency_code=EUR" target="_blank" class="btn-modal btn-paypal">
+              Donar con PayPal
+          </a>
+      </div>
+  </div>
+
+  <script>
+      function openModal(id) {
+          document.getElementById(id + 'Modal').style.display = 'flex';
+      }
+
+      function closeModal(id) {
+          document.getElementById(id + 'Modal').style.display = 'none';
+      }
+
+      // Cerrar al hacer clic fuera
+      window.onclick = function(event) {
+          if (event.target.classList.contains('modal-overlay')) {
+              event.target.style.display = 'none';
+          }
+      }
+  </script>
+
+</body>
+</html>

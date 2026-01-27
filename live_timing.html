@@ -81,6 +81,7 @@
     .map-dot.is-me { background: var(--neon-green); border: 2px solid white; width: 30px; height: 30px; top: -13px; z-index: 10; }
     .map-dot.is-me img { width: 100%; height: 100%; object-fit: cover; }
   </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_timing_runtime.css') }}">
 </head>
 <body>
 
@@ -95,7 +96,7 @@
 
 <div class="session-bar">
     <div>AIR: <span class="session-val" id="weatherAir">--°C</span></div>
-    <div>TRACK: <span class="session-val" id="weatherTrack">--°C</span></div>
+    <div>PISTA: <span class="session-val" id="weatherTrack">--°C</span></div>
     <div>RAIN: <span class="session-val" id="weatherRain">--%</span></div>
     <div>STATUS: <span class="session-val" id="weatherStatus">--</span></div>
 </div>
@@ -290,5 +291,6 @@
     setInterval(update, 500); 
     function openStratModal() { alert("¡Módulo de carga listo!"); }
 </script>
+<script src="/static/js/live_timing_runtime.js"></script>
 </body>
 </html>

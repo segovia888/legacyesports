@@ -454,11 +454,31 @@ def loop(ir, state):
             except Exception:
                 pass
 
-            try:
-                wk = ir['SessionInfo'].get('WeekendInfo', {})
-                track_name = str(wk.get('TrackDisplayName') or wk.get('TrackName') or "-")
-            except Exception:
-                pass
+	    try:
+    	        # Algunas builds lo dan en SessionInfo->WeekendInfo, otras en WeekendInfo directo
+   	        wk = {}
+    	        try:
+        	     wk = ir['SessionInfo'].get('WeekendInfo', {}) or {}
+    	        except Exception:
+        	     wk = {}
+
+    	        direct = {}
+    	        try:
+        	     direct = ir['WeekendInfo'] or {}
+    	        except Exception:
+        	     direct = {}
+
+    	        track_name = (
+        	     wk.get('TrackDisplayName') or
+        	     wk.get('TrackName') or
+        	     direct.get('TrackDisplayName') or
+        	     direct.get('TrackName') or
+        	     "-"
+    	        )
+    	        track_name = str(track_name)
+	     except Exception:
+    	        track_name = "-"
+
 
             payload = {
                 "drivers": drivers_data,
@@ -471,16 +491,19 @@ def loop(ir, state):
             }
 
             
-            # ENVÍO
-            try:
-                requests.post(URL_DESTINO, json=payload, timeout=1)
-                print(f"📡 OK | T: {display_timer} | {len(drivers_data)} Cars", end='\r')
-            except: pass
+	    # ENVÍO
+	    try:
+    	    r = requests.post(URL_DESTINO, json=payload, timeout=2)
 
-        except Exception as e:
-            # Si falla algo, que no se pare el script
-            print(f"⚠️ Error loop: {e}")
-            pass
+    	     if r.status_code != 200:
+        	     txt = (r.text or "").strip().replace("\n", " ")
+        	     print(f"❌ POST {r.status_code} -> {txt[:140]}")
+    	     else:
+        	     print(f"📡 OK | T: {display_timer} | {len(drivers_data)} Cars", end='\r')
+
+except Exception as e:
+    print(f"❌ POST ERROR -> {e}")
+
 
 if __name__ == '__main__':
     ir = irsdk.IRSDK()

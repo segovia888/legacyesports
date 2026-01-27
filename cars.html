@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Legacy eSports · Garage Manager</title>
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+<link rel="manifest" href="{{ url_for('manifest') }}">
+  <meta name="theme-color" content="#FF5A00">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register("{{ url_for('service_worker') }}")
+        .then(reg => console.log('SW registrado: ', reg.scope))
+        .catch(err => console.log('SW error: ', err));
+      });
+    }
+  </script>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    :root {
+      --lec-orange: #FF5A00; --lec-lime: #CCFF00;
+      --carbon: #0a0a0a; --glass: rgba(20, 20, 20, 0.9);
+      --border: rgba(255, 255, 255, 0.15);
+      --input-bg: rgba(0, 0, 0, 0.5);
+    }
+    body {
+      background-color: var(--carbon); color: #f5f5f5;
+      font-family: 'Roboto', sans-serif; margin: 0; min-height: 100vh;
+      display: flex; flex-direction: column;
+    }
+    .bg-container {
+        position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: -1;
+        background: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}") no-repeat center center/cover;
+    }
+    .bg-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); }
+    
+    header {
+      padding: 20px 40px; display: flex; justify-content: space-between; align-items: center;
+      background: rgba(0,0,0,0.6); backdrop-filter: blur(5px); border-bottom: 1px solid var(--border);
+    }
+    .brand { font-family: 'Teko', sans-serif; font-size: 2rem; text-transform: uppercase; color: white; display:flex; gap:10px; align-items:center;}
+    .btn-back { color: var(--lec-lime); border: 1px solid var(--lec-lime); padding: 5px 15px; text-decoration: none; border-radius: 4px; font-weight: bold; }
+    
+    main { max-width: 1200px; margin: 30px auto; width: 100%; padding: 0 20px; display: grid; grid-template-columns: 1fr 2fr; gap: 30px; }
+    @media(max-width:900px){ main{ grid-template-columns: 1fr; } }
+
+    .card { background: var(--glass); border: 1px solid var(--border); border-radius: 12px; padding: 25px; }
+    h2 { font-family: 'Teko', sans-serif; color: var(--lec-orange); margin-top: 0; border-bottom: 1px solid var(--border); padding-bottom: 10px; }
+    
+    label { display: block; font-size: 0.8rem; text-transform: uppercase; color: #aaa; margin-top: 10px; margin-bottom: 5px; }
+    input, select { width: 100%; padding: 10px; background: var(--input-bg); border: 1px solid var(--border); color: white; border-radius: 4px; }
+    input:focus { outline: none; border-color: var(--lec-lime); background: black; }
+    
+    .btn-save { margin-top: 20px; width: 100%; padding: 12px; background: var(--lec-lime); border: none; font-weight: bold; cursor: pointer; text-transform: uppercase; font-family: 'Teko', sans-serif; font-size: 1.2rem; }
+    .btn-save:hover { background: #bfff00; box-shadow: 0 0 15px rgba(204,255,0,0.4); }
+
+    /* --- FILTROS --- */
+    .filter-bar {
+        display: flex; gap: 10px; margin-bottom: 15px; flex-wrap: wrap;
+    }
+    .filter-btn {
+        background: transparent; border: 1px solid var(--border); color: #aaa;
+        padding: 5px 12px; border-radius: 20px; cursor: pointer; font-size: 0.85rem; text-transform: uppercase; font-weight: bold; transition: 0.2s;
+    }
+    .filter-btn:hover { border-color: white; color: white; }
+    .filter-btn.active { background: var(--lec-orange); border-color: var(--lec-orange); color: black; }
+
+    /* --- LISTA DE COCHES --- */
+    .car-list { display: flex; flex-direction: column; gap: 10px; max-height: 600px; overflow-y: auto; padding-right: 10px; }
+    
+    .car-item { 
+        display: flex; justify-content: space-between; align-items: center; 
+        background: rgba(255,255,255,0.05); padding: 10px 15px; border-radius: 6px; border: 1px solid transparent; 
+        transition: opacity 0.3s ease;
+    }
+    /* Clase para ocultar al filtrar */
+    .car-item.hidden { display: none; }
+
+    .car-item:hover { border-color: var(--lec-lime); background: rgba(255,255,255,0.08); }
+    
+    .car-info { display: flex; align-items: center; gap: 15px; }
+    .car-cat { background: var(--lec-lime); color: black; font-weight: bold; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; min-width: 50px; text-align: center;}
+    .car-name { font-weight: 500; font-size: 1.1rem; }
+    
+    .delete-btn { background: transparent; color: #ff4444; border: 1px solid #ff4444; border-radius: 4px; padding: 5px 10px; cursor: pointer; transition: 0.2s; }
+    .delete-btn:hover { background: #ff4444; color: white; }
+
+  </style>
+</head>
+<body>
+  <div class="bg-container"><div class="bg-overlay"></div></div>
+  
+  <header>
+    <div class="brand"><i class="fas fa-warehouse"></i> Garage <span>Manager</span></div>
+    <a href="{{ url_for('index') }}" class="btn-back"><i class="fas fa-arrow-left"></i> Volver</a>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2><i class="fas fa-plus-circle"></i> Añadir Coche</h2>
+      <form method="POST">
+        <label>Categoría</label>
+        <select name="category" required>
+            <option value="GT3">GT3</option>
+            <option value="GT4">GT4</option>
+            <option value="GTP">GTP / LMDh</option>
+            <option value="LMP2">LMP2</option>
+            <option value="TCR">TCR</option>
+            <option value="F4">Formula 4</option>
+            <option value="F3">Formula 3</option>
+            <option value="PCup">Porsche Cup</option>
+            <option value="MX5">Mazda MX-5</option>
+            <option value="GR86">Toyota GR86</option>
+            <option value="Street Stock">Street Stock</option>
+            <option value="Otro">Otro</option>
+        </select>
+
+        <label>Nombre del Modelo</label>
+        <input type="text" name="name" required placeholder="Ej. Ford Mustang GT3" autocomplete="off">
+        
+        <button type="submit" class="btn-save">Añadir al Garaje</button>
+      </form>
+      
+      <div style="margin-top: 20px; font-size: 0.9rem; color: #888; border-top: 1px solid var(--border); padding-top: 10px;">
+        <i class="fas fa-info-circle"></i> Los coches añadidos aquí aparecerán automáticamente en el planificador de estrategias.
+      </div>
+    </section>
+
+    <section class="card">
+      <h2><i class="fas fa-list"></i> Coches Disponibles</h2>
+      
+      <div class="filter-bar" id="filterBar">
+        <button class="filter-btn active" data-filter="all">Todos</button>
+        <button class="filter-btn" data-filter="GT3">GT3</button>
+        <button class="filter-btn" data-filter="GT4">GT4</button>
+        <button class="filter-btn" data-filter="GTP">GTP</button>
+        <button class="filter-btn" data-filter="LMP2">LMP2</button>
+        <button class="filter-btn" data-filter="PCup">PCup</button>
+      </div>
+
+      <div class="car-list" id="carList">
+        {% for car in cars %}
+        <div class="car-item" data-category="{{ car.category }}">
+            <div class="car-info">
+                <span class="car-cat">{{ car.category }}</span>
+                <span class="car-name">{{ car.name }}</span>
+            </div>
+            <form action="{{ url_for('delete_car', id=car.id) }}" method="POST" onsubmit="return confirm('¿Eliminar este coche? Se borrará de las opciones.');">
+                <button class="delete-btn"><i class="fas fa-trash"></i></button>
+            </form>
+        </div>
+        {% else %}
+        <div style="text-align: center; padding: 20px; color: #666;">
+            El garaje está vacío. ¡Añade tu primer coche!
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+  </main>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const buttons = document.querySelectorAll('.filter-btn');
+        const items = document.querySelectorAll('.car-item');
+
+        buttons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                // 1. Quitar clase active de todos y poner al actual
+                buttons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+
+                // 2. Obtener filtro
+                const filter = btn.getAttribute('data-filter');
+
+                // 3. Mostrar/Ocultar items
+                items.forEach(item => {
+                    const category = item.getAttribute('data-category');
+                    if (filter === 'all' || category === filter) {
+                        item.classList.remove('hidden');
+                    } else {
+                        item.classList.add('hidden');
+                    }
+                });
+            });
+        });
+    });
+  </script>
+</body>
+</html>

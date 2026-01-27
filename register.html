@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Legacy Hub · Registro</title>
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600&display=swap" rel="stylesheet">
+    <style>
+        body { background: #0a0a0a; color: white; font-family: 'Roboto', sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; 
+               background-image: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}"); background-size: cover; }
+        .login-card { background: rgba(0,0,0,0.85); padding: 40px; border-radius: 12px; border: 1px solid #333; width: 100%; max-width: 350px; text-align: center; backdrop-filter: blur(10px); }
+        h1 { font-family: 'Teko'; font-size: 2.5rem; margin: 0; color: white; line-height: 1; text-transform: uppercase; }
+        input, select { width: 100%; padding: 12px; margin: 10px 0; background: #222; border: 1px solid #444; color: white; border-radius: 4px; box-sizing: border-box; }
+        button { width: 100%; padding: 12px; background: #CCFF00; border: none; font-weight: bold; cursor: pointer; border-radius: 4px; font-family: 'Teko'; font-size: 1.4rem; text-transform: uppercase; margin-top: 10px; }
+        button:hover { background: white; color: black; }
+        .links { margin-top: 20px; font-size: 0.9rem; }
+        a { color: #888; text-decoration: none; }
+        a:hover { color: #CCFF00; }
+        .alert { background: rgba(255, 68, 68, 0.2); color: #ff4444; padding: 10px; border-radius: 4px; margin-bottom: 15px; font-size: 0.9rem; }
+        
+        /* Estilo para el campo oculto */
+        #teamNameField { display: none; border-color: #FF5A00; }
+    </style>
+</head>
+<body>
+    <div class="login-card">
+        <h1>Solicitar <span>Acceso</span></h1>
+        <p style="color:#888; margin-bottom:20px;">Registro de Pilotos</p>
+
+        {% with messages = get_flashed_messages() %}
+            {% if messages %}
+                {% for message in messages %}
+                    <div class="alert">{{ message }}</div>
+                {% endfor %}
+            {% endif %}
+        {% endwith %}
+
+        <form method="POST">
+            <input type="text" name="username" placeholder="Nombre de Usuario" required>
+            <input type="email" name="email" placeholder="Correo Electrónico" required>
+            <input type="password" name="password" placeholder="Contraseña" required>
+            
+            <label style="display:block; text-align:left; font-size:0.8rem; color:#aaa; margin-top:10px;">Tipo de Licencia</label>
+            <select name="reg_type" id="regTypeSelector" onchange="toggleTeamInput()">
+                <option value="privateer">🏁 Piloto Privado (Individual)</option>
+                <option value="team">🛡️ Piloto de Equipo (Solicitar Ingreso)</option>
+            </select>
+
+            <input type="text" name="team_name_input" id="teamNameField" placeholder="¿A qué equipo perteneces?">
+
+            <button type="submit">Enviar Solicitud</button>
+        </form>
+        
+        <div class="links">
+            <p>¿Ya tienes cuenta? <a href="{{ url_for('login') }}">Iniciar Sesión</a></p>
+        </div>
+    </div>
+
+    <script>
+        function toggleTeamInput() {
+            var selector = document.getElementById("regTypeSelector");
+            var input = document.getElementById("teamNameField");
+            if (selector.value === "team") {
+                input.style.display = "block";
+                input.required = true;
+            } else {
+                input.style.display = "none";
+                input.required = false;
+                input.value = "";
+            }
+        }
+    </script>
+</body>
+</html>

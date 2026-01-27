@@ -1,0 +1,569 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Legacy eSports Club · Setup Doctor</title>
+<link rel="icon" type="image/png" href="{{ url_for('static', filename='img/favicon.png') }}">
+<link rel="manifest" href="{{ url_for('manifest') }}">
+  <meta name="theme-color" content="#FF5A00">
+  <script>
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register("{{ url_for('service_worker') }}")
+        .then(reg => console.log('SW registrado: ', reg.scope))
+        .catch(err => console.log('SW error: ', err));
+      });
+    }
+  </script>
+  
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600;700&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+
+  <style>
+    /* --- VARIABLES DE DISEÑO --- */
+    :root {
+        --lec-orange: #FF5A00;
+        --lec-lime: #CCFF00;
+        --carbon: #0a0a0a;
+        --glass: rgba(20, 20, 20, 0.85);
+        --glass-dark: rgba(10, 10, 10, 0.95);
+        --border: rgba(255, 255, 255, 0.15);
+        --text-main: #e8eaed;
+        --text-muted: #9aa3ad;
+        
+        /* Colores de estado para el JS */
+        --ok: #CCFF00;   /* Coincide con Lime */
+        --warn: #FF5A00; /* Coincide con Orange */
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+        margin: 0;
+        font-family: 'Roboto', sans-serif;
+        background-color: var(--carbon);
+        color: var(--text-main);
+        min-height: 100vh;
+        display: flex;
+        flex-direction: column;
+    }
+
+    /* --- FONDO --- */
+    .bg-container {
+        position: fixed;
+        top: 0; left: 0; width: 100%; height: 100%;
+        z-index: -1;
+        background: url("{{ url_for('static', filename='img/legacy-card-bg.jpg') }}") no-repeat center center/cover;
+    }
+    .bg-overlay {
+        position: absolute;
+        top: 0; left: 0; width: 100%; height: 100%;
+        background: linear-gradient(180deg, rgba(0,0,0,0.7) 0%, rgba(0,0,0,0.95) 100%);
+    }
+
+    /* --- HEADER --- */
+    .top-bar {
+        padding: 20px 40px;
+        background: rgba(0,0,0,0.6);
+        backdrop-filter: blur(5px);
+        border-bottom: 1px solid var(--border);
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        z-index: 10;
+    }
+
+    .brand {
+        font-family: 'Teko', sans-serif;
+        font-size: 2rem;
+        text-transform: uppercase;
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        color: white;
+    }
+    
+    .brand span { color: var(--lec-lime); }
+
+    /* --- LAYOUT GRID --- */
+    .u-container {
+        max-width: 1400px;
+        margin: 40px auto;
+        padding: 0 20px;
+        width: 100%;
+        z-index: 2;
+    }
+
+    .u-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 30px;
+    }
+
+    @media(min-width: 980px) {
+        .u-grid { grid-template-columns: 1fr 1fr; }
+    }
+
+    /* --- TARJETAS (Glassmorphism) --- */
+    .u-card {
+        background: var(--glass);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+        backdrop-filter: blur(10px);
+        overflow: hidden;
+    }
+
+    .u-card__body { padding: 25px; }
+
+    h3 {
+        font-family: 'Teko', sans-serif;
+        font-size: 1.8rem;
+        color: var(--lec-orange);
+        text-transform: uppercase;
+        margin-top: 0;
+        margin-bottom: 20px;
+        border-bottom: 1px solid var(--border);
+        padding-bottom: 10px;
+    }
+
+    /* --- INPUTS & TEXTAREA --- */
+    textarea#userNotes {
+        width: 100%;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid var(--border);
+        color: white;
+        border-radius: 8px;
+        padding: 15px;
+        min-height: 120px;
+        resize: vertical;
+        font-family: 'Roboto', sans-serif;
+        font-size: 1rem;
+        margin-top: 15px;
+    }
+    textarea#userNotes:focus {
+        outline: none;
+        border-color: var(--lec-lime);
+        background: black;
+    }
+
+    #notesHelp { margin-top: 8px; font-size: 0.85rem; color: var(--text-muted); }
+
+    /* --- DROPZONE (Zona de archivo) --- */
+    .drop {
+        border: 2px dashed var(--border);
+        background: rgba(255, 255, 255, 0.02);
+        border-radius: 12px;
+        padding: 30px;
+        text-align: center;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .drop:hover, .drop.drag {
+        border-color: var(--lec-lime);
+        background: rgba(204, 255, 0, 0.05);
+    }
+    
+    .drop.ok { border-color: var(--ok); background: rgba(204, 255, 0, 0.1); }
+
+    .drop div { font-weight: bold; font-size: 1.1rem; }
+    .drop small { color: var(--text-muted); }
+    .drop input[type=file] { display: none; }
+    
+    .status { margin-top: 5px; font-size: 0.9rem; color: var(--text-muted); }
+    .status.ok { color: var(--ok); font-weight: bold; }
+
+    /* --- BOTONES --- */
+    .u-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 20px; }
+
+    .u-btn {
+        border: 1px solid var(--lec-lime);
+        background: transparent;
+        color: var(--lec-lime);
+        padding: 10px 20px;
+        border-radius: 6px;
+        cursor: pointer;
+        font-family: 'Teko', sans-serif;
+        font-size: 1.2rem;
+        text-transform: uppercase;
+        transition: all 0.2s;
+    }
+
+    .u-btn:hover:not(:disabled) {
+        background: var(--lec-lime);
+        color: black;
+        box-shadow: 0 0 15px rgba(204, 255, 0, 0.4);
+    }
+
+    .u-btn--primary {
+        background: var(--lec-orange);
+        border-color: var(--lec-orange);
+        color: white;
+    }
+    .u-btn--primary:hover:not(:disabled) {
+        background: white;
+        color: var(--lec-orange);
+        box-shadow: 0 0 15px rgba(255, 90, 0, 0.4);
+    }
+    
+    .u-btn:disabled {
+        border-color: #444; color: #666; cursor: not-allowed; background: transparent;
+    }
+
+    /* --- PANEL DE SÍNTOMAS --- */
+    .sympanel {
+        display: none;
+        margin-top: 15px;
+        padding: 15px;
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        background: rgba(0,0,0,0.3);
+    }
+
+    .symgrid { display: flex; flex-wrap: wrap; gap: 10px; }
+
+    .symtag {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        padding: 8px 12px;
+        border: 1px solid var(--border);
+        border-radius: 4px;
+        background: rgba(255,255,255,0.05);
+        color: #ccc;
+        cursor: pointer;
+        font-size: 0.9rem;
+        transition: all 0.2s;
+    }
+
+    .symtag:hover { border-color: white; color: white; }
+    
+    /* Pequeño truco visual para inputs checked */
+    .symtag:has(input:checked), .symtag input:checked + span { 
+        /* Si el navegador soporta :has es genial, si no, se verá normal */
+        border-color: var(--lec-lime);
+        color: var(--lec-lime);
+        background: rgba(204, 255, 0, 0.1);
+    }
+
+    /* --- RESULTADOS (Estilos generados por JS) --- */
+    .list { display: flex; flex-direction: column; gap: 15px; }
+
+    .rec {
+        background: var(--glass-dark);
+        border-left: 4px solid var(--lec-lime); /* Borde lateral tipo MoTeC */
+        border-radius: 4px;
+        padding: 15px;
+    }
+
+    .rec .title {
+        font-family: 'Teko', sans-serif;
+        font-size: 1.3rem;
+        font-weight: 500;
+        color: white;
+        margin-bottom: 5px;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    .pill {
+        display: inline-block;
+        padding: 2px 8px;
+        border-radius: 4px;
+        font-size: 0.8rem;
+        font-family: 'Roboto', sans-serif;
+        font-weight: bold;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        background: rgba(255,255,255,0.1);
+        margin-left: 10px;
+    }
+
+    .pill.ok {
+        background: var(--lec-lime);
+        color: black;
+        box-shadow: 0 0 5px var(--lec-lime);
+    }
+
+    .note { color: #ccc; font-size: 0.95rem; line-height: 1.4; }
+    
+    hr.sep { border-color: var(--border); margin: 15px 0; }
+
+    /* --- EXPLICACIÓN FINAL --- */
+    #explain {
+        font-size: 1rem;
+        line-height: 1.6;
+        color: #ddd;
+        white-space: pre-wrap;
+        background: transparent;
+    }
+
+    /* Footer */
+    footer {
+        text-align: center; margin-top: auto; padding: 30px; 
+        color: var(--text-muted); font-size: 0.8rem; z-index: 10;
+    }
+
+    /* Header y Title ocultos originales */
+    .u-container > .header { display: none; }
+    .u-container > h1 { display: none; }
+    .u-container > .u-sub { display: none; }
+
+  </style>
+
+</head>
+<body>
+
+  <div class="bg-container"><div class="bg-overlay"></div></div>
+
+  <div style="position:fixed;right:15px;bottom:15px;z-index:2000;font-size:12px;
+             padding:5px 10px;border-radius:4px;background:var(--carbon);border:1px solid var(--lec-lime);
+             color:var(--lec-lime); font-family: 'Teko', sans-serif; letter-spacing: 1px;">
+    LEGACY SYSTEM v2.0
+  </div>
+
+  <header class="top-bar">
+    <div class="brand">
+        <i class="fas fa-heartbeat" style="color:var(--lec-orange); font-size: 1.8rem;"></i>
+        <div>Setup <span>Doctor</span></div>
+    </div>
+    <a href="{{ url_for('index') }}" class="u-btn"><i class="fas fa-arrow-left"></i> Volver</a>
+  </header>
+
+  <main class="u-container">
+    
+    <div class="u-grid">
+      
+      <div class="u-card">
+        <div class="u-card__body">
+          <h3>1) Datos de Entrada</h3>
+          
+          <div class="drop" id="dropFile">
+            <i class="fas fa-file-upload" style="font-size: 2rem; color: var(--border);"></i>
+            <div>Arrastra tu archivo <b>.sto</b></div>
+            <small>O haz clic para buscar</small>
+            <div id="statusFile" class="status">Ningún archivo cargado</div>
+            <input type="file" id="fileSto" accept=".sto" />
+          </div>
+
+          <div class="u-row">
+            <button class="u-btn u-btn--primary" id="btnAnalyze" disabled><i class="fas fa-search"></i> Analizar</button>
+            <button class="u-btn" id="btnSymptoms"><i class="fas fa-list-ul"></i> Síntomas</button>
+            <button class="u-btn" id="btnClear" style="margin-left:auto; border-color:#555; color:#888;"><i class="fas fa-trash"></i></button>
+          </div>
+
+          <textarea id="userNotes" placeholder="Describe el problema (ej: se va de atrás al salir, subvira en media, bloquea frenos)..."></textarea>
+          <div id="notesHelp"><i class="fas fa-info-circle"></i> Tip: Describe tus sensaciones o usa el menú de Síntomas.</div>
+
+          <div id="symPanel" class="sympanel">
+            <h6 style="color:white; margin-bottom:10px; font-family:'Teko'; text-transform:uppercase;">Selección Rápida:</h6>
+            <div class="symgrid">
+              <label class="symtag"><input type="checkbox" value="more_top_speed"> Falta Velocidad Punta</label>
+              <label class="symtag"><input type="checkbox" value="under_brake"> Subviraje en Frenada</label>
+              <label class="symtag"><input type="checkbox" value="over_entry"> Sobreviraje Entrada</label>
+              <label class="symtag"><input type="checkbox" value="under_mid"> Subviraje Curva Media</label>
+              <label class="symtag"><input type="checkbox" value="over_exit"> Sobreviraje Salida</label>
+              <label class="symtag"><input type="checkbox" value="snap"> Latigazos / Baches</label>
+              <label class="symtag"><input type="checkbox" value="wet"> <i class="fas fa-cloud-rain"></i> Lluvia / Mojado</label>
+              <label class="symtag"><input type="checkbox" value="hot"> <i class="fas fa-temperature-high"></i> Pista Caliente</label>
+              <label class="symtag"><input type="checkbox" value="cold"> <i class="fas fa-snowflake"></i> Pista Fría</label>
+              <label class="symtag"><input type="checkbox" value="pit_dry_to_wet"> Pit: Seco → Mojado</label>
+              <label class="symtag"><input type="checkbox" value="pit_wet_to_dry"> Pit: Mojado → Seco</label>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="u-card">
+        <div class="u-card__body">
+          <h3>2) Diagnóstico Mecánico</h3>
+          <div id="results" class="list">
+            <div style="text-align:center; padding:40px; color:#666;">
+                <i class="fas fa-cogs" style="font-size:3rem; margin-bottom:10px; opacity:0.3;"></i><br>
+                Sube un archivo o describe un problema para ver las soluciones.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="u-card" style="grid-column: 1 / -1;">
+        <div class="u-card__body">
+          <h3>3) Feedback de Ingeniero</h3>
+          <div id="explain" style="border-left: 2px solid var(--text-muted); padding-left: 15px;">
+            — Aquí aparecerá la explicación técnica detallada de los cambios propuestos.
+          </div>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <footer>© Legacy eSports Club · Setup Doctor · Created by Manolo Segovia</footer>
+
+  <script>
+    // ====== DOM refs
+    // Nota: btnBack lo hemos cambiado a un <a> en el HTML, pero si el JS lo referencia, 
+    // lo mantenemos aunque no tenga listener (o lo re-referenciamos para no romper)
+    // En este caso, el HTML tiene un <a> con href, así que el JS listener de btnBack es redundante pero inofensivo si el ID no existe o es un <a>.
+    // Vamos a mantener los IDs originales.
+    
+    const btnBack=document.getElementById('btnBack'); // Ojo: en mi HTML he puesto class="u-btn" href="..." pero ID puede faltar. 
+    // CORRECCIÓN: Si el script original usa btnBack.addEventListener, necesito que el elemento tenga ese ID.
+    // En el HTML de arriba he puesto <a href... class="u-btn">. Voy a confiar en el href, pero para que no de error el JS:
+    // El JS original hace: btnBack.addEventListener('click',()=>{window.location.href=...});
+    // Como ya es un <a href>, el JS fallaría si no encuentra el ID. 
+    // TRUCO: No tocaré el script, pero aseguraré que el elemento no rompa el script.
+    
+    const fileSto=document.getElementById('fileSto');
+    const drop=document.getElementById('dropFile');
+    const statusFile=document.getElementById('statusFile');
+    const btnAnalyze=document.getElementById('btnAnalyze');
+    const btnClear=document.getElementById('btnClear');
+    const btnSymptoms=document.getElementById('btnSymptoms');
+    const symPanel=document.getElementById('symPanel');
+    const notesEl=document.getElementById('userNotes');
+    const results=document.getElementById('results');
+    const explain=document.getElementById('explain');
+
+    // ====== Back (El original usa JS, mi HTML usa href. Si el JS corre, reasignará el click. No pasa nada.)
+    if(btnBack) {
+        btnBack.addEventListener('click',(e)=>{
+            // Si es un <a href>, dejamos que navegue nativamente o usamos el JS.
+            // El JS original tiene una URL fija hardcodeada. Mejor que use mi href dinámico de Flask.
+            // Para evitar conflictos, dejaré que el JS falle silenciosamente o que el href mande.
+        });
+    }
+
+    // ====== Dropzone
+    ['dragenter','dragover'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('drag');}));
+    ['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('drag');}));
+
+    drop.addEventListener('drop',e=>{e.preventDefault();const f=e.dataTransfer?.files?.[0];if(f){fileSto.files=e.dataTransfer.files;onFilePicked();}});
+    drop.addEventListener('click',()=>{fileSto.value='';fileSto.click();});
+
+    function onFilePicked(){
+    const f=fileSto.files[0];
+    if(!f)return;
+    statusFile.textContent=f.name+' ('+(f.size/1024).toFixed(1)+' KB)';
+    statusFile.classList.add('ok');
+    drop.classList.add('ok');
+    btnAnalyze.disabled=false;
+    }
+    fileSto.addEventListener('change',onFilePicked);
+
+    // ====== Symptoms panel toggle
+    btnSymptoms.addEventListener('click',()=>{
+    symPanel.style.display = symPanel.style.display==='block' ? 'none' : 'block';
+    });
+
+    // ====== Clear
+    btnClear.addEventListener('click',()=>{
+    fileSto.value='';
+    statusFile.textContent='Ningún archivo cargado';
+    statusFile.classList.remove('ok');
+    drop.classList.remove('ok');
+    btnAnalyze.disabled=true;
+    results.innerHTML='<div style="text-align:center; padding:40px; color:#666;"><i class="fas fa-cogs" style="font-size:3rem; margin-bottom:10px; opacity:0.3;"></i><br>Sube un archivo o describe un problema.</div>';
+    explain.innerText='—';
+    document.querySelectorAll('#symPanel input').forEach(c=>c.checked=false);
+    });
+
+    // ====== Analysis rules
+    function analyze(){
+    const text=(notesEl.value||'').toLowerCase();
+    const syms=Array.from(document.querySelectorAll('#symPanel input:checked')).map(c=>c.value);
+
+    const notesArr=[]; // condiciones
+    if(syms.includes('wet')) notesArr.push('Mojado: baja 0.2–0.4 bar; ablanda 1–2 clicks en ARB/dampers.');
+    if(syms.includes('hot')) notesArr.push('Pista caliente: +0.1–0.2 bar; vigila frenos.');
+    if(syms.includes('cold')) notesArr.push('Pista fría: −0.1–0.2 bar; +ala para calentar.');
+
+    const recs=[];
+    const push=(title,param,change,why)=>recs.push({title,param,change,why});
+
+    if(/recta/.test(text)||syms.includes('more_top_speed')){
+        push('Más velocidad punta','Rear Wing','−1 a −2 clicks','menos drag → más velocidad en recta');
+        push('Más velocidad punta','Rear Ride Height','−1 a −2 mm','menos rake reduce drag (ojo con apoyo en alta)');
+    }
+    if(/fren/.test(text)||syms.includes('under_brake')){
+        push('Subviraje al frenar','Brake Bias','−0.3% a −0.8%','más reparto atrás ayuda a girar al frenar');
+        push('Subviraje al frenar','Front ARB','−1 click','menos rigidez delante → más giro en entrada');
+    }
+    if(/sobre.*entrad|entrad.*sobre/.test(text)||syms.includes('over_entry')){
+        push('Sobreviraje en entrada','Coast Diff','−1 a −2 clicks','menos bloqueo en retención → entra más estable');
+        push('Sobreviraje en entrada','Rear ARB','−1 click','más blanda detrás reduce sobreviraje de entrada');
+    }
+    if(/sobre.*salid|salid.*sobre/.test(text)||syms.includes('over_exit')){
+        push('Sobreviraje en salida','Power Diff','+1 a +2 clicks','más bloqueo en aceleración → más tracción');
+        push('Sobreviraje en salida','Rear Toe-In','+0.02°','añade estabilidad en salida');
+    }
+    if(/sub.*medio|medio.*sub/.test(text)||syms.includes('under_mid')){
+        push('Subviraje en curva media','Front ARB','−1 click','más transferencia delante → más giro en medio');
+        push('Subviraje en curva media','Front Ride Height','−1 a −2 mm','bajar morro mejora apoyo (cuidado con pianos)');
+    }
+    if(/bache|latigazo|snap/.test(text)||syms.includes('snap')){
+        push('Latigazos / baches','Bump (F/R)','−1 click','más absorción del bache');
+        push('Latigazos / baches','Rebound (Rear)','−1 click','evita que rebote al volver');
+    }
+
+    // Plan de pit integrado
+    const wantsDryToWet = syms.includes('pit_dry_to_wet');
+    const wantsWetToDry = syms.includes('pit_wet_to_dry');
+    if(wantsDryToWet || wantsWetToDry){
+        const hasLowWing = recs.some(r=>/Rear Wing/i.test(r.param) && /−/.test(r.change));
+        const hasHighWing = recs.some(r=>/Rear Wing/i.test(r.param) && /\+/.test(r.change));
+        if(wantsDryToWet){
+        push('Plan de parada (pit)','Rear Wing', hasLowWing? '+2 a +3 clicks' : '+1 a +2 clicks','en lluvia necesitas más carga atrás para estabilidad y tracción');
+        push('Plan de parada (pit)','Tyre Pressures (todas)','−0.2 a −0.4 bar','más huella y temperatura en mojado');
+        push('Plan de parada (pit)','Brake Bias','+0.3% a +0.8%','más delante para frenar recto con poca adherencia');
+        }
+        if(wantsWetToDry){
+        push('Plan de parada (pit)','Rear Wing', hasHighWing? '−2 a −3 clicks' : '−1 a −2 clicks','en seco podemos quitar drag para ganar punta');
+        push('Plan de parada (pit)','Tyre Pressures (todas)','+0.1 a +0.3 bar','evita flaneo y mejora respuesta en seco');
+        push('Plan de parada (pit)','Brake Bias','−0.2% a −0.6%','recupera giro en frenada con más agarre');
+        }
+    }
+
+    // Render
+    const parts=[];
+    if(notesArr.length){parts.push('<div class="rec"><div class="title" style="color:var(--text-muted)">CONDICIONES DETECTADAS</div><div class="note">'+notesArr.join('<br>')+'</div></div>');}
+    if(recs.length){
+        const byTitle={};
+        recs.forEach(r=>{(byTitle[r.title]||(byTitle[r.title]=[])).push(r);});
+        Object.keys(byTitle).forEach(title=>{
+        const list=byTitle[title].map(r=>'<div class="rec"><div class="title">'+r.param+' <span class="pill ok">'+r.change+'</span></div><div class="note">'+r.why+'</div></div>').join('');
+        parts.push('<div style="margin-bottom:10px;"><h5 style="color:var(--lec-orange); font-family:Teko; margin-bottom:5px;">'+title+'</h5>'+list+'</div>');
+        });
+    } else if (!notesArr.length) {
+        parts.push('<div class="rec"><div class="title">Setup Equilibrado</div><div class="note">No se detectaron problemas específicos. El coche parece estable según los datos introducidos.</div></div>');
+    }
+    results.innerHTML=parts.join('');
+
+    // Explicación (una separación)
+    const lines=[];
+    if(syms.includes('wet')) lines.push('🌧️ MOJADO: El objetivo es suavizar el coche. Bajamos presiones y ablandamos suspensión para maximizar el contacto mecánico.');
+    if(syms.includes('hot')) lines.push('🌡️ CALOR: Gestión de gomas. Subimos presión para dar estructura y vigilamos no cocinar los frenos.');
+    if(syms.includes('cold')) lines.push('❄️ FRÍO: Necesitamos temperatura rápida. Más carga aerodinámica (ala) y presiones algo más bajas ayudan a calentar.');
+    recs.forEach(r=>{
+        if(/Rear Wing/i.test(r.param)) lines.push('• Ala Trasera: Menos ala = más velocidad punta, pero coche más nervioso. Más ala = coche pegado al suelo.');
+        if(/Rear Ride Height|Ride Height Rear/i.test(r.param)) lines.push('• Altura Trasera: Bajarla reduce el rake y el drag. Ganas en recta, pierdes agilidad.');
+        if(/Brake Bias/i.test(r.param)) lines.push('• Reparto de Frenada: Moverlo atrás ayuda a rotar el coche al entrar en curva. Cuidado con bloquear.');
+        if(/Front ARB/i.test(r.param)) lines.push('• Barra Delantera: Ablandarla permite que el morro muerda mejor al inicio del giro.');
+        if(/Power Diff/i.test(r.param)) lines.push('• Diferencial (Power): Bloquearlo más te da tracción bruta al salir, pero puede hacer subvirar.');
+    });
+    explain.innerText = (lines.length ? lines.join('\n') : '— Sin cambios significativos reportados.');
+    }
+
+    // ====== Analyze button + atajos
+    btnAnalyze.addEventListener('click',analyze);
+    notesEl.addEventListener('keydown',e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){ analyze(); }});
+  </script>
+</body>
+</html>

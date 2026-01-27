@@ -4,8 +4,9 @@ import re
 import json
 import sqlite3
 import time
+import base64
 from datetime import datetime, date
-from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory
+from flask import Flask, render_template, request, jsonify, redirect, url_for, flash, send_from_directory, Response
 from flask_sqlalchemy import SQLAlchemy
 from flask_login import LoginManager, UserMixin, login_user, login_required, logout_user, current_user
 from werkzeug.utils import secure_filename
@@ -462,6 +463,68 @@ def estrategia_cargar(sid):
     if s.team_id != current_user.team_id and s.user_id != current_user.id: return jsonify({"error": "No auth"}), 403
     return jsonify({"id": s.id, "name": s.name, "car_class": s.car_class, "car_name": s.car_name, "payload": json.loads(s.payload)})
 
+# --- API: Estrategias (JSON) para Live Timing ---
+
+@app.route('/api/estrategias', methods=['GET'])
+@login_required
+def api_estrategias():
+    """
+    Devuelve la lista de estrategias accesibles por el usuario actual.
+    Formato: [{id, name, car_name, car_class, created_at}, ...]
+    """
+    try:
+        query = Strategy.query.filter(
+            (Strategy.user_id == current_user.id) |
+            ((Strategy.team_id == current_user.team_id) & (Strategy.is_shared == True))
+        ).order_by(Strategy.created_at.desc())
+        items = []
+        for s in query.all():
+            items.append({
+                "id": s.id,
+                "name": s.name,
+                "car_name": s.car_name,
+                "car_class": s.car_class,
+                "created_at": s.created_at.isoformat() if s.created_at else None,
+                "author_id": s.user_id
+            })
+        return jsonify({"ok": True, "strategies": items})
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+
+@app.route('/api/estrategia/<int:sid>', methods=['GET'])
+@login_required
+def api_estrategia_detail(sid):
+    """
+    Devuelve el detalle de una estrategia: metadata + payload (parsed JSON).
+    payload se guarda en Strategy.payload (texto JSON). Devolvemos payload parseado.
+    """
+    try:
+        s = Strategy.query.get_or_404(sid)
+        # Seguridad: permitir acceso si es del usuario o compartida con el team
+        if not (s.user_id == current_user.id or (s.team_id == current_user.team_id and s.is_shared) or current_user.role == 'admin'):
+            return jsonify({"ok": False, "error": "forbidden"}), 403
+
+        try:
+            payload = json.loads(s.payload) if s.payload else {}
+        except Exception:
+            # si payload no es JSON válido devolvemos raw string
+            payload = {"raw": s.payload}
+
+        resp = {
+            "ok": True,
+            "id": s.id,
+            "name": s.name,
+            "car_name": s.car_name,
+            "car_class": s.car_class,
+            "created_at": s.created_at.isoformat() if s.created_at else None,
+            "payload": payload
+        }
+        return jsonify(resp)
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
+# --- fin API estrategias ---
+
 @app.route("/estrategia/borrar/<int:sid>", methods=["POST"])
 @login_required
 def estrategia_borrar(sid):
@@ -549,14 +612,47 @@ def admin_panel():
         return redirect(url_for('admin_panel'))
     return render_template("admin_panel.html", users=User.query.all(), teams=Team.query.all())
 
-# --- RUTAS DE ARCHIVOS ESTÁTICOS ---
-@app.route('/manifest.json')
-def manifest(): return send_from_directory('static', 'manifest.json')
-@app.route('/sw.js')
-def service_worker(): return send_from_directory('static', 'sw.js')
+# --- RUTAS DE ARCHIVOS ESTÁTICOS (PWA / Manifest / Service Worker) ---
+# Mantener una única definición para evitar colisiones
+@app.route('/manifest.json', endpoint='manifest_json')
+def manifest_json():
+    return jsonify({
+        "short_name": "Legacy",
+        "name": "Legacy eSports Club",
+        "icons": [{"src": "/static/img/favicon.png", "sizes": "192x192", "type": "image/png"}],
+        "start_url": "/",
+        "display": "standalone",
+        "theme_color": "#FF5A00",
+        "background_color": "#0a0a0a"
+    })
 
-# --- TELEMETRÍA (modificado para incluir track_name y session_type) ---
-telemetry_data = {"connected": False, "laps": 0, "fuel": 0, "driver": "", "flag": "green", "timestamp": 0}
+app.add_url_rule('/manifest.json', endpoint='manifest', view_func=manifest_json)
+
+@app.route('/sw.js', endpoint='service_worker_js')
+def service_worker_js():
+    return app.send_static_file('js/sw.js') if os.path.exists('static/js/sw.js') else ("", 204)
+# Alias para compatibilidad con la plantilla (url_for('service_worker'))
+app.add_url_rule('/sw.js', endpoint='service_worker', view_func=service_worker_js)
+
+
+# --- TELEMETRÍA (modificado para incluir last_ingest y endpoint /api/telemetry/live) ---
+import time
+from datetime import datetime
+from flask import jsonify, request
+
+# umbral en segundos para considerar la telemetría stale (ajusta si tu bridge envía menos/más frecuentemente)
+TELEMETRY_STALE_THRESHOLD = 8.0
+
+telemetry_data = {
+    "connected": False,
+    "laps": 0,
+    "fuel": 0,
+    "driver": "",
+    "flag": "green",
+    "timestamp": 0,
+    "last_ingest": 0,
+    "last_payload": {}
+}
 
 @app.route('/api/telemetry/ingest', methods=['POST'])
 def ingest_telemetry():
@@ -566,14 +662,18 @@ def ingest_telemetry():
     """
     global telemetry_data
     try:
-        data = request.json or {}
-        # merge básico
+        data = request.get_json(force=True, silent=True) or {}
+        # merge básico (mantiene claves previas si payload no las incluye)
         telemetry_data.update(data or {})
+
+        # Marca recibido y guarda payload (shallow copy)
+        now = time.time()
+        telemetry_data["last_ingest"] = now
+        telemetry_data["timestamp"] = now  # compatibilidad con código existente
+        telemetry_data["last_payload"] = dict(data) if isinstance(data, dict) else data
         telemetry_data["connected"] = True
-        telemetry_data["timestamp"] = time.time()
 
         # Normalizar campos que podrían venir con nombres distintos desde distintos bridges
-        # Prioriza track_name -> track -> Track
         telemetry_data["track_name"] = (
             data.get("track_name")
             or data.get("track")
@@ -582,7 +682,6 @@ def ingest_telemetry():
             or ""
         )
 
-        # Prioriza session_type -> session -> Session
         telemetry_data["session_type"] = (
             data.get("session_type")
             or data.get("session")
@@ -593,15 +692,44 @@ def ingest_telemetry():
 
         return jsonify({"status": "ok"})
     except Exception as e:
-        return jsonify({"status": "error", "message": str(e)}), 500@app.route('/api/telemetry/live', methods=['GET'])
-def get_live_telemetry():
-    if time.time() - telemetry_data.get("timestamp", 0) > 5: telemetry_data["connected"] = False
-    return jsonify(telemetry_data)
+        return jsonify({"status": "error", "message": str(e)}), 500
 
+
+@app.route('/api/telemetry/live', methods=['GET'])
+def telemetry_live():
+    """
+    Devuelve el estado de telemetría actual al frontend.
+    Calcula si la telemetría está stale (no se han recibido paquetes recientemente)
+    y ajusta el campo 'connected' en la respuesta para que el cliente lo use directamente.
+    """
+    global telemetry_data
+    # copia para no exponer referencias internas
+    resp = dict(telemetry_data)
+
+    last = telemetry_data.get("last_ingest") or telemetry_data.get("timestamp") or 0
+    resp["last_ingest"] = last
+
+    # ISO string para debug/lectura
+    try:
+        resp["last_ingest_iso"] = datetime.utcfromtimestamp(last).isoformat() + "Z" if last else ""
+    except Exception:
+        resp["last_ingest_iso"] = ""
+
+    # decide conectado/desconectado según frescura (server-side)
+    if last:
+        age = time.time() - last
+        if age > TELEMETRY_STALE_THRESHOLD:
+            resp["connected"] = False
+            resp["telemetry_age_seconds"] = age
+        else:
+            resp["connected"] = True
+            resp["telemetry_age_seconds"] = age
+    else:
+        resp["connected"] = False
+        resp["telemetry_age_seconds"] = None
+
+    return jsonify(resp)
 # --- ENDPOINT: /api/telemetry/live  (añadir si falta) ---
-import time
-from flask import jsonify
-
 @app.route('/api/telemetry/live', methods=['GET'])
 def get_live_telemetry():
     """
@@ -619,6 +747,7 @@ def get_live_telemetry():
 
     return jsonify(telemetry_data), 200
 # --- fin endpoint ---
+
 
 @app.route('/client/download/bridge')
 def download_bridge_script():
@@ -746,7 +875,6 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         pass
 '''
-    from flask import Response
     return Response(
         bridge_code,
         mimetype='text/x-python',
@@ -759,142 +887,298 @@ if __name__ == '__main__':
 # BLOQUE LIVE TIMING & PWA (INSERTAR AQUÍ)
 # ==========================================
 
-# Rutas para evitar el error 500 del Manifest
-@app.route('/manifest.json', endpoint='manifest_json')
-def manifest_json():
-    return jsonify({
-        "short_name": "Legacy",
-        "name": "Legacy eSports Club",
-        "icons": [{"src": "/static/img/favicon.png", "sizes": "192x192", "type": "image/png"}],
-        "start_url": "/",
-        "display": "standalone",
-        "theme_color": "#FF5A00",
-        "background_color": "#0a0a0a"
-    })
-
-@app.route('/sw.js', endpoint='service_worker_js')
-def service_worker_js():
-    return app.send_static_file('js/sw.js') if os.path.exists('static/js/sw.js') else ("", 204)
-
 # ==========================================
 # FIN BLOQUE LIVE TIMING
 # ==========================================
-# --- INYECCIÓN: back button + badges TRACK / SESSION colocados en session-bar ---
-from flask import request
+# --- INYECCIÓN INLINE RESTAURADA (NONCE, clases únicas, logs, reintentos) ---
+# INYECCIÓN: actualizar CSP para permitir fonts/styles + inline script con nonce
 
 @app.after_request
-def inject_live_timing_badges_and_back(response):
+def inject_live_timing_with_nonce(response):
     """
-    Inyecta en /live-timing:
-     - handler para el botón '.btn-nav' (volver a '/')
-     - asegura que existan los badges 'trackNameBadge' y 'sessionTypeBadge'
-       colocados dentro de la .session-bar, justo antes del bloque del AIR.
-    Mantiene la clase 'session-val' para que el estilo coincida con los demás
-    elementos (AIR/TRACK/RAIN/STATUS). Silencioso en caso de error.
+    Inyecta script inline en /live-timing y ajusta CSP para permitir fonts/styles y conexiones HTTPS necesarias.
+    Esta versión PRESERVA la inyección JS completa que ya tenías y solo actualiza la directiva connect-src
+    para permitir https: (necesario para cargar recursos desde jsdelivr/cdnjs durante desarrollo).
     """
     try:
+        # import local para no depender de importaciones externas en la parte superior del archivo
+        import base64
+        from flask import request
+
         if request.path == '/live-timing' and response.content_type and 'text/html' in response.content_type.lower():
+            # generar nonce único por respuesta
+            nonce = base64.b64encode(os.urandom(16)).decode('ascii')
+
+            # CSP ampliada: permitimos https: en connect-src para evitar bloqueos a CDNs (útil en dev)
+            csp = (
+                "default-src 'self'; "
+                "script-src 'self' 'nonce-{}'; "
+                "connect-src 'self' ws: https:; "
+                "img-src 'self' data:; "
+                "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net; "
+                "font-src 'self' https://fonts.gstatic.com https://cdnjs.cloudflare.com data:;"
+            ).format(nonce)
+            response.headers['Content-Security-Policy'] = csp
+
             body = response.get_data(as_text=True)
-            injection = r"""
-<script>
+
+            # --- Inyección JS (se conserva tu bloque completo) ---
+            injection = '''<!-- INLINE INJECTION (CSP updated): live_timing strategies modal (nonce) -->
+<script nonce="''' + nonce + '''">
 (function(){
   try {
-    // --- Back button ---
-    var backEl = document.querySelector('a.btn-nav, .btn-nav');
-    if (backEl && !backEl.dataset._legacy_back_injected) {
-      backEl.addEventListener('click', function(e){
-        e.preventDefault();
-        window.location.href = '/';
-      }, {passive: true});
-      backEl.dataset._legacy_back_injected = '1';
-    }
+    console && console.log && console.log('inline strategies (nonce) loaded - CSP updated');
 
-    // --- Ensure badges are inside .session-bar before the AIR block ---
+    // back button safe attach
+    try {
+      var backEl = document.querySelector('a.btn-nav, .btn-nav');
+      if (backEl && !backEl.dataset._legacy_back_injected) {
+        backEl.addEventListener('click', function(e){ e.preventDefault(); window.location.href = '/'; }, {passive:true});
+        backEl.dataset._legacy_back_injected = '1';
+      }
+    } catch(e){}
+
+    // place badges
     function placeBadges() {
-      var sessionBar = document.querySelector('.session-bar');
-      if (!sessionBar) return;
+      try {
+        var sessionBar = document.querySelector('.session-bar');
+        if (!sessionBar) return;
+        var airSpan = document.getElementById('weatherAir');
+        var insertBeforeNode = airSpan && airSpan.parentElement && sessionBar.contains(airSpan.parentElement) ? airSpan.parentElement : sessionBar.firstElementChild;
 
-      // Find the AIR container (the div that contains the span#weatherAir)
-      var airSpan = document.getElementById('weatherAir');
-      var insertBeforeNode = null;
-      if (airSpan && airSpan.parentElement && sessionBar.contains(airSpan.parentElement)) {
-        insertBeforeNode = airSpan.parentElement;
-      } else {
-        // fallback: use first child of sessionBar
-        insertBeforeNode = sessionBar.firstElementChild;
-      }
-
-      // Helper: ensure a span with id exists and is wrapped in a div inside sessionBar
-      function ensureWrappedSpan(id, initialText) {
-        var existing = document.getElementById(id);
-        var span;
-        if (existing) {
-          // if it's already a span, reuse it; otherwise (if it's a div), try to find span inside
-          if (existing.tagName.toLowerCase() === 'span') {
-            span = existing;
+        function ensureWrappedSpan(id, initialText) {
+          var existing = document.getElementById(id);
+          var span;
+          if (existing) {
+            span = existing.tagName && existing.tagName.toLowerCase() === 'span' ? existing : (existing.querySelector && existing.querySelector('span#' + id) || existing);
           } else {
-            span = existing.querySelector('span#' + id) || existing;
+            span = document.createElement('span');
+            span.id = id;
+            span.className = 'session-val';
+            span.textContent = initialText;
           }
-        } else {
-          span = document.createElement('span');
-          span.id = id;
-          span.className = 'session-val';
-          span.textContent = initialText;
-        }
-
-        // Ensure wrapper div around span, so layout matches (each item is a div)
-        var wrapper = span.parentElement;
-        if (!wrapper || wrapper.classList.contains('session-bar') || wrapper.tagName.toLowerCase() === 'span') {
-          // create a wrapper
-          wrapper = document.createElement('div');
-          // If span is already in DOM move it into the wrapper, otherwise append
-          if (span.parentElement) {
-            span.parentElement.replaceChild(wrapper, span);
-            wrapper.appendChild(span);
+          var wrapper = span.parentElement;
+          if (!wrapper || wrapper.classList.contains('session-bar') || (wrapper.tagName && wrapper.tagName.toLowerCase() === 'span')) {
+            wrapper = document.createElement('div');
+            if (span.parentElement) { span.parentElement.replaceChild(wrapper, span); wrapper.appendChild(span); } else { wrapper.appendChild(span); }
+          }
+          if (!span.classList.contains('session-val')) span.classList.add('session-val');
+          if (!sessionBar.contains(wrapper)) {
+            if (insertBeforeNode) sessionBar.insertBefore(wrapper, insertBeforeNode);
+            else sessionBar.appendChild(wrapper);
           } else {
-            wrapper.appendChild(span);
+            if (insertBeforeNode && wrapper.nextSibling !== insertBeforeNode && wrapper !== insertBeforeNode.previousSibling) {
+              sessionBar.insertBefore(wrapper, insertBeforeNode);
+            }
           }
+          return span;
         }
 
-        // Make sure span has the session-val class for styling
-        if (!span.classList.contains('session-val')) span.classList.add('session-val');
-
-        // Insert wrapper into sessionBar at correct position if not already there
-        if (!sessionBar.contains(wrapper)) {
-          if (insertBeforeNode) sessionBar.insertBefore(wrapper, insertBeforeNode);
-          else sessionBar.appendChild(wrapper);
-        } else {
-          // If already present but in wrong position, move it before insertBeforeNode
-          if (insertBeforeNode && wrapper.nextSibling !== insertBeforeNode && wrapper !== insertBeforeNode.previousSibling) {
-            sessionBar.insertBefore(wrapper, insertBeforeNode);
-          }
-        }
-        return span;
-      }
-
-      // Use labels inside initial text so UI displays something until telemetry updates
-      ensureWrappedSpan('trackNameBadge', 'TRACK: -');
-      ensureWrappedSpan('sessionTypeBadge', 'SESSION: -');
+        ensureWrappedSpan('trackNameBadge', 'TRACK: -');
+        ensureWrappedSpan('sessionTypeBadge', 'SESSION: -');
+      } catch(e) { console && console.warn && console.warn('placeBadges error', e); }
     }
 
-    if (document.readyState === 'complete' || document.readyState === 'interactive') {
-      placeBadges();
-    } else {
-      window.addEventListener('DOMContentLoaded', placeBadges);
-      setTimeout(placeBadges, 200);
-    }
-  } catch (e) {
-    console && console.warn && console.warn('inject_live_timing_badges_and_back error', e);
-  }
+    // strategies logic (abstracción minimal, expone attachLoadButtons)
+    (function(){
+      var API_LIST = '/api/estrategias';
+      var API_DETAIL = function(id){ return '/api/estrategia/' + id; };
+      var TELEMETRY = '/api/telemetry/live';
+
+      function el(tag, attrs, children) {
+        attrs = attrs || {}; children = children || [];
+        var d = document.createElement(tag);
+        for (var k in attrs) {
+          if (!attrs.hasOwnProperty(k)) continue;
+          if (k === 'class') d.className = attrs[k];
+          else if (k === 'html') d.innerHTML = attrs[k];
+          else d.setAttribute(k, attrs[k]);
+        }
+        (Array.isArray(children) ? children : [children]).forEach(function(c){
+          if (!c) return;
+          if (typeof c === 'string') d.appendChild(document.createTextNode(c));
+          else d.appendChild(c);
+        });
+        return d;
+      }
+
+      function createModal() {
+        var overlay = el('div', { class: 'lt-overlay', id: 'lt-strat-overlay', style: 'position:fixed; inset:0; display:flex; align-items:center; justify-content:center; z-index:9999;' });
+        var modal = el('div', { class: 'lt-modal', style: 'background:#0f0f10; color:#fff; border-radius:8px; width:86%; max-width:900px; max-height:80vh; overflow:auto; box-shadow:0 8px 30px rgba(0,0,0,0.6); padding:14px; font-family: inherit;' });
+        var header = el('div', { class: 'lt-modal-header', style: 'display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;' }, [
+          el('div', { style: 'font-weight:700; font-size:1.05rem;' }, ['Cargar Estrategia']),
+          el('button', { class: 'lt-close-btn', style: 'background:transparent; border:1px solid #444; color:#fff; padding:6px 10px; border-radius:6px; cursor:pointer;' }, ['Cerrar'])
+        ]);
+        var content = el('div', { class: 'lt-modal-body', id: 'lt-modal-content', style: 'padding-top:6px;' });
+        modal.appendChild(header); modal.appendChild(content); overlay.appendChild(modal); document.body.appendChild(overlay);
+        overlay.addEventListener('click', function(e){ if (e.target === overlay) overlay.remove(); });
+        var closeBtn = modal.querySelector('.lt-close-btn'); if (closeBtn) closeBtn.addEventListener('click', function(){ overlay.remove(); });
+        return { overlay: overlay, content: content };
+      }
+
+      async function fetchStrategies() {
+        var res = await fetch(API_LIST, { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      }
+
+      async function fetchStrategy(id) {
+        var res = await fetch(API_DETAIL(id), { credentials: 'same-origin' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return await res.json();
+      }
+
+      function renderStrategyPreview(container, strat) {
+        container.innerHTML = '';
+        var meta = el('div', { style: 'margin-bottom:8px; display:flex; gap:10px; align-items:center;' }, [
+          el('div', { style: 'font-weight:700; font-size:1rem;' }, [strat.name || 'Sin nombre']),
+          el('div', { style: 'color:#aaa; font-size:0.9rem;' }, [ (strat.car_name || '') + ' ' + (strat.car_class || '') ])
+        ]);
+        container.appendChild(meta);
+        var stints = (strat.payload && strat.payload.stints) || [];
+        var table = el('table', { style: 'width:100%; border-collapse:collapse; margin-top:6px;' });
+        var thead = el('thead', {}, [
+          el('tr', {}, [
+            el('th', { style:'text-align:left; padding:6px; color:#bbb;'} , ['#']),
+            el('th', { style:'text-align:left; padding:6px; color:#bbb;' } , ['PILOTO']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['INICIO']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['FIN']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['LAPS']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['FUEL']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['WX']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['PIT']),
+            el('th', { style:'padding:6px; color:#bbb;' } , ['NOTAS'])
+          ])
+        ]);
+        var tbody = el('tbody', {});
+        stints.forEach(function(s,i){
+          var tr = el('tr', {}, [
+            el('td', { style:'padding:6px; color:#fff;' }, [String(i+1)]),
+            el('td', { style:'padding:6px; color:#fff;' }, [s.driver || s.name || 'N/A']),
+            el('td', { style:'padding:6px; color:#fff;' }, [s.start || s.inicio || '--:--']),
+            el('td', { style:'padding:6px; color:#fff;' }, [s.end || s.fin || '--:--']),
+            el('td', { style:'padding:6px; color:#fff;' }, [String(s.laps || '')]),
+            el('td', { style:'padding:6px; color:#fff;' }, [String(s.fuel || '')]),
+            el('td', { style:'padding:6px; color:#fff;' }, [s.wx || '-']),
+            el('td', { style:'padding:6px; color:#fff;' }, [s.pit ? 'YES' : '']),
+            el('td', { style:'padding:6px; color:#fff;' }, [s.notes || ''])
+          ]);
+          tbody.appendChild(tr);
+        });
+        table.appendChild(thead); table.appendChild(tbody); container.appendChild(table);
+      }
+
+      async function applyStrategyToPlan(strat) {
+        try {
+          if (!strat || !strat.ok) { alert('Estrategia inválida o no accesible.'); return; }
+          var payload = strat.payload || {};
+          // backward-compatible: prefer payload.stints, fallback to payload.relays (server uses "relays")
+          var stints = Array.isArray(payload.stints) ? payload.stints : (Array.isArray(payload.relays) ? payload.relays.map(function(r){ return { driver: r.driver || r.name, start: r.start, end: r.end, laps: (r.laps ? Number(r.laps) : ''), fuel: r.fuel, wx: '', pit: !!r.pit, notes: r.notes || '' }; }) : []);
+          var tbody = document.getElementById('strategyBody');
+          if (!tbody) { alert('No se encontró plan de carrera en la página.'); return; }
+          tbody.innerHTML = '';
+          var tele = {};
+          try { var r = await fetch(TELEMETRY, { credentials: 'same-origin' }); if (r.ok) tele = await r.json(); } catch(e){ tele = {}; }
+          stints.forEach(function(s, idx){
+            var tr = document.createElement('tr');
+            var names = (tele && tele.grid) ? tele.grid.map(function(g){ return (g.name||'').toLowerCase(); }) : [];
+            var driverName = (s.driver || s.name || '').toLowerCase();
+            var isConn = names.indexOf(driverName) !== -1;
+            var tdIndex = document.createElement('td'); tdIndex.textContent = String(idx+1);
+            var tdPilot = document.createElement('td'); tdPilot.textContent = s.driver || s.name || '---'; tdPilot.className = (isConn ? 'pilot-on' : 'pilot-off'); tdPilot.style.textAlign = 'left';
+            var tdStart = document.createElement('td'); tdStart.textContent = s.start || s.inicio || '--:--';
+            var tdEnd = document.createElement('td'); tdEnd.textContent = s.end || s.fin || '--:--';
+            var tdLaps = document.createElement('td'); tdLaps.textContent = String(s.laps || s.laps_est || '');
+            var tdFuel = document.createElement('td'); tdFuel.textContent = String(s.fuel || '');
+            var tdWx = document.createElement('td'); tdWx.textContent = s.wx || '-';
+            var tdPit = document.createElement('td'); tdPit.textContent = s.pit ? 'YES' : '';
+            var tdNotes = document.createElement('td'); tdNotes.textContent = s.notes || s.notas || '';
+
+            tr.appendChild(tdIndex); tr.appendChild(tdPilot); tr.appendChild(tdStart); tr.appendChild(tdEnd);
+            tr.appendChild(tdLaps); tr.appendChild(tdFuel); tr.appendChild(tdWx); tr.appendChild(tdPit); tr.appendChild(tdNotes);
+            tbody.appendChild(tr);
+          });
+          console && console.log && console.log('Strategy applied, rows:', stints.length);
+        } catch(e) { console && console.error && console.error('applyStrategyToPlan error', e); alert('Error al aplicar estrategia'); }
+      }
+
+      function attachLoadButtons() {
+        var buttons = document.querySelectorAll('.btn-load, #btnLoadStrategy');
+        Array.prototype.forEach.call(buttons, function(btn){
+          try {
+            if (btn.dataset.ltAttached) return;
+            btn.addEventListener('click', async function(ev){
+              try {
+                ev.preventDefault();
+                var modalObj = createModal();
+                var content = modalObj.content;
+                content.innerHTML = '<div style="padding:8px">Cargando estrategias…</div>';
+                var listRes;
+                try { listRes = await fetchStrategies(); } catch(err) { content.innerHTML = '<div style="padding:8px; color:#f88;">No se pudo listar estrategias (comprueba login)</div>'; return; }
+                if (!listRes || !listRes.ok) { content.innerHTML = '<div style="padding:8px; color:#f88;">Error al listar estrategias</div>'; return; }
+                var strategies = listRes.strategies || [];
+                content.innerHTML = '';
+                if (!strategies.length) { content.innerHTML = '<div style="padding:8px; color:#ccc;">No hay estrategias disponibles</div>'; return; }
+                var listWrap = el('div', { style: 'display:flex; gap:10px; flex-direction:column;' });
+                strategies.forEach(function(s){
+                  var item = el('div', { style:'display:flex; justify-content:space-between; align-items:center; gap:8px; padding:8px; border-bottom:1px solid rgba(255,255,255,0.04);' });
+                  var left = el('div', {}, [ el('div', { style:'font-weight:700; color:#fff;' }, [s.name]), el('div', { style:'color:#aaa; font-size:0.85rem;' }, [ (s.car_name||'') + ' · ' + (s.car_class||'') ]) ]);
+                  var actions = el('div', {}, [ el('button', { style:'background:#222; border:1px solid #444; color:#fff; padding:6px 8px; border-radius:6px; cursor:pointer;', 'data-id': s.id }, ['Previsualizar']), el('button', { style:'background:#0a84ff; border:none; color:#fff; padding:6px 8px; border-radius:6px; margin-left:6px; cursor:pointer;', 'data-id': s.id }, ['Cargar']) ]);
+                  item.appendChild(left); item.appendChild(actions); listWrap.appendChild(item);
+                  Array.prototype.forEach.call(actions.querySelectorAll('button'), function(b){
+                    b.addEventListener('click', async function(ev2){
+                      ev2.stopPropagation();
+                      var id = b.getAttribute('data-id');
+                      try {
+                        var detail = await fetchStrategy(id);
+                        if (!detail || !detail.ok) { alert('No se pudo cargar la estrategia (no autorizada o inválida). Comprueba permisos.'); return; }
+                        if (b.textContent && b.textContent.trim() === 'Previsualizar') {
+                          var prev = content.querySelector('#lt-preview'); if (prev) prev.remove();
+                          var preview = el('div', { id:'lt-preview', style:'margin-top:10px;' });
+                          renderStrategyPreview(preview, detail);
+                          content.appendChild(preview);
+                          preview.scrollIntoView({ behavior: 'smooth' });
+                        } else {
+                          await applyStrategyToPlan(detail);
+                          modalObj.overlay.remove();
+                        }
+                      } catch(err) { console && console.error && console.error('action click error', err); alert('Error al obtener la estrategia. Mira la consola.'); }
+                    });
+                  });
+                });
+                content.appendChild(listWrap);
+              } catch(e) { console && console.error && console.error('btn click error', e); }
+            });
+            btn.dataset.ltAttached = '1';
+          } catch(e) { console && console.warn && console.warn('attach btn fail', e); }
+        });
+      }
+
+      window.attachLoadButtons = attachLoadButtons;
+      window.applyStrategyToPlan = applyStrategyToPlan;
+      window.initLiveTimingStrategies = function(){ try { placeBadges(); } catch(e){} try { attachLoadButtons(); } catch(e){} };
+
+      function safeInitRetries(){ var attempts=[0,120,300,800,1500]; attempts.forEach(function(t){ setTimeout(function(){ try{ window.initLiveTimingStrategies(); }catch(e){} }, t); }); }
+      if (document.readyState === 'complete' || document.readyState === 'interactive') safeInitRetries(); else { window.addEventListener('DOMContentLoaded', safeInitRetries); setTimeout(safeInitRetries, 500); }
+
+    })();
+
+  } catch(e) { console && console.error && console.error('inline injection error', e); }
 })();
 </script>
-"""
+<!-- END INLINE INJECTION -->'''
+            # solo insertar si existe </body> para no romper otras respuestas
             if '</body>' in body:
                 body = body.replace('</body>', injection + '</body>')
                 response.set_data(body)
-    except Exception:
-        pass
+    except Exception as e:
+        # imprime el error en consola del servidor para debugging sin interrumpir la respuesta
+        try:
+            print("inject_live_timing_with_nonce error:", e)
+        except:
+            pass
     return response
-# --- FIN INYECCIÓN ---
+# --- FIN INYECCIÓN (CSP updated) ---# --- FIN INYECCIÓN (CSP updated) ---
+
 if __name__ == "__main__":
     app.run(debug=False, host='0.0.0.0', port=5000)

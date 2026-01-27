@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Legacy Admin Panel</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;500&family=Teko:wght@400;600&display=swap" rel="stylesheet">
+  <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css" rel="stylesheet">
+  <style>
+    body { background: #0a0a0a; color: #f5f5f5; font-family: 'Roboto', sans-serif; padding: 40px; }
+    h1 { font-family: 'Teko'; color: #FF5A00; text-transform: uppercase; font-size: 3rem; margin-bottom: 20px; }
+    h2 { font-family: 'Teko'; color: #ccc; margin-top: 40px; font-size: 2rem; border-bottom: 1px solid #333; padding-bottom: 10px; }
+    
+    /* INPUTS Y BOTONES GENERALES */
+    input, select { background: #222; border: 1px solid #444; color: white; padding: 8px; border-radius: 4px; }
+    button { cursor: pointer; transition: 0.2s; border: none; border-radius: 4px; }
+    
+    /* CAJA CREAR EQUIPO */
+    .create-team-box { background: rgba(255, 90, 0, 0.1); border: 1px solid #FF5A00; padding: 20px; border-radius: 8px; margin-bottom: 30px; display:flex; gap:10px; align-items:center;}
+    .create-team-box input { flex-grow: 1; padding: 12px; font-size:1.1rem; }
+    .btn-orange { background: #FF5A00; color: black; font-weight: bold; font-family: 'Teko'; font-size: 1.3rem; padding: 8px 25px; text-transform: uppercase; }
+    .btn-orange:hover { background: white; }
+
+    /* TABLAS */
+    .table-container { background: rgba(20,20,20,0.9); border: 1px solid #333; border-radius: 8px; padding: 20px; overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; }
+    th { text-align: left; color: #888; padding: 10px; border-bottom: 1px solid #333; text-transform: uppercase; font-size: 0.9rem; }
+    td { padding: 12px 10px; border-bottom: 1px solid #222; vertical-align: middle; }
+    
+    .badge { padding: 4px 8px; border-radius: 4px; font-size: 0.8rem; font-weight: bold; text-transform: uppercase; }
+    .bg-green { background: rgba(204, 255, 0, 0.1); color: #CCFF00; border: 1px solid #CCFF00; }
+    .bg-red { background: rgba(255, 68, 68, 0.1); color: #ff4444; border: 1px solid #ff4444; }
+    
+    /* BUSCADOR */
+    .search-bar { width: 100%; padding: 12px; font-size: 1rem; margin-bottom: 15px; background: #151515; border: 1px solid #444; color: white; border-radius: 6px; }
+    .search-bar:focus { outline: none; border-color: #CCFF00; }
+
+    /* BOTONES ACCIONES */
+    .actions button { background: none; font-size: 1.1rem; padding: 5px; color:#666; }
+    .btn-edit:hover { color: #3498db; transform: scale(1.2); }
+    .btn-del:hover { color: #ff4444; transform: scale(1.2); }
+    .btn-ok:hover { color: #CCFF00; transform: scale(1.2); }
+    
+    /* MODALS */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.85); z-index: 100; display: none; justify-content: center; align-items: center; }
+    .modal { background: #111; padding: 30px; border-radius: 8px; border: 1px solid #444; width: 90%; max-width: 400px; position:relative; }
+    .modal h3 { margin-top: 0; color: #CCFF00; font-family:'Teko'; font-size:1.8rem; text-transform: uppercase; }
+    .modal input { width: 100%; margin-bottom: 15px; padding: 10px; }
+    .close-modal { position: absolute; top: 10px; right: 15px; font-size: 1.5rem; cursor: pointer; color: #666; }
+    .close-modal:hover { color: white; }
+
+    .back-btn { display: inline-block; margin-bottom: 20px; color: #aaa; text-decoration: none; font-weight: bold; }
+    .back-btn:hover { color: white; }
+  </style>
+</head>
+<body>
+
+  <a href="{{ url_for('index') }}" class="back-btn"><i class="fas fa-arrow-left"></i> Volver al Hub</a>
+  
+  <h1>Panel de Control <span>ADMIN</span></h1>
+
+  {% with messages = get_flashed_messages() %}
+      {% if messages %}
+          <div style="background:#222; color:#CCFF00; padding:15px; margin-bottom:20px; border-left:4px solid #CCFF00;">
+              {{ messages[0] }}
+          </div>
+      {% endif %}
+  {% endwith %}
+
+  <h2>Gestión de Equipos</h2>
+  
+  <form method="POST" class="create-team-box">
+      <input type="hidden" name="action" value="create_team">
+      <input type="text" name="team_name" placeholder="Nombre del Nuevo Equipo..." required autocomplete="off">
+      <button type="submit" class="btn-orange"><i class="fas fa-plus"></i> Crear</button>
+  </form>
+
+  <div class="table-container">
+      <table>
+          <thead><tr><th>ID</th><th>Nombre</th><th>Miembros</th><th>Acciones</th></tr></thead>
+          <tbody>
+              {% for t in teams %}
+              <tr>
+                  <td style="color:#666;">#{{ t.id }}</td>
+                  <td style="font-weight:bold; color:white;">{{ t.name }}</td>
+                  <td><span class="badge bg-green">{{ t.members|length }}</span></td>
+                  <td class="actions">
+                      <button type="button" class="btn-edit" onclick="openTeamModal('{{ t.id }}', '{{ t.name }}')">
+                          <i class="fas fa-pencil-alt"></i>
+                      </button>
+                      <form method="POST" style="display:inline;" onsubmit="return confirm('¿Borrar equipo {{ t.name }}? Los pilotos pasarán a ser privados.');">
+                          <input type="hidden" name="action" value="delete_team">
+                          <input type="hidden" name="team_id" value="{{ t.id }}">
+                          <button type="submit" class="btn-del"><i class="fas fa-trash"></i></button>
+                      </form>
+                  </td>
+              </tr>
+              {% endfor %}
+          </tbody>
+      </table>
+  </div>
+
+  <div style="display:flex; justify-content:space-between; align-items:end; margin-top:40px;">
+      <h2>Gestión de Pilotos</h2>
+      <div style="color:#666;">Total: {{ users|length }}</div>
+  </div>
+  
+  <input type="text" id="searchInput" class="search-bar" placeholder="🔍 Buscar piloto por nombre, email o solicitud..." onkeyup="filterTable()">
+
+  <div class="table-container">
+      <table id="usersTable">
+          <thead>
+              <tr>
+                  <th>Usuario / Email</th>
+                  <th>Solicitud</th>
+                  <th>Estado</th>
+                  <th>Equipo</th>
+                  <th>Acciones</th>
+              </tr>
+          </thead>
+          <tbody>
+              {% for u in users %}
+              <tr>
+                  <td>
+                      <div style="font-weight:bold; font-size:1.1rem; color:white;">{{ u.username }}</div>
+                      <div style="font-size:0.8rem; color:#888;">{{ u.email }}</div>
+                  </td>
+                  
+                  <td style="color:var(--lec-orange);">
+                      {% if u.requested_team %}{{ u.requested_team }}{% else %}<span style="color:#444;">-</span>{% endif %}
+                  </td>
+
+                  <td>
+                      {% if u.role == 'admin' %}<span class="badge bg-green" style="border-color:gold; color:gold;">ADMIN</span>
+                      {% elif u.is_approved %}<span class="badge bg-green">Activo</span>
+                      {% else %}<span class="badge bg-red">Pendiente</span>{% endif %}
+                  </td>
+                  
+                  <td>
+                      <form method="POST" style="display:flex; align-items:center;">
+                          <input type="hidden" name="action" value="update_team">
+                          <input type="hidden" name="user_id" value="{{ u.id }}">
+                          <select name="new_team_id" onchange="this.form.submit()" style="padding:5px; width:150px; background:#111; color:#ccc;">
+                              <option value="none" {% if not u.team_id %}selected{% endif %}>Privado</option>
+                              {% for t in teams %}
+                                  <option value="{{ t.id }}" {% if u.team_id == t.id %}selected{% endif %}>{{ t.name }}</option>
+                              {% endfor %}
+                          </select>
+                      </form>
+                  </td>
+
+                  <td class="actions">
+                      <button type="button" class="btn-edit" onclick="openUserModal('{{ u.id }}', '{{ u.username }}', '{{ u.email }}')" title="Editar Datos">
+                          <i class="fas fa-user-edit"></i>
+                      </button>
+
+                      <form method="POST" style="display:inline;">
+                          <input type="hidden" name="user_id" value="{{ u.id }}">
+                          {% if not u.is_approved %}
+                              <button type="submit" name="action" value="approve" class="btn-ok" title="Aprobar"><i class="fas fa-check-circle"></i></button>
+                          {% endif %}
+                          
+                          {% if u.role != 'admin' %}
+                              <button type="submit" name="action" value="delete_user" class="btn-del" title="Eliminar" onclick="return confirm('¿Borrar usuario permanentemente?');"><i class="fas fa-trash"></i></button>
+                          {% endif %}
+                      </form>
+                  </td>
+              </tr>
+              {% endfor %}
+          </tbody>
+      </table>
+  </div>
+
+  <div id="teamModal" class="modal-overlay">
+      <div class="modal">
+          <span class="close-modal" onclick="closeModal('teamModal')">&times;</span>
+          <h3>Renombrar Equipo</h3>
+          <form method="POST">
+              <input type="hidden" name="action" value="rename_team">
+              <input type="hidden" name="team_id" id="modalTeamId">
+              <label>Nuevo Nombre:</label>
+              <input type="text" name="new_name" id="modalTeamName" required>
+              <button type="submit" class="btn-orange" style="width:100%;">Guardar</button>
+          </form>
+      </div>
+  </div>
+
+  <div id="userModal" class="modal-overlay">
+      <div class="modal">
+          <span class="close-modal" onclick="closeModal('userModal')">&times;</span>
+          <h3>Editar Usuario</h3>
+          <form method="POST">
+              <input type="hidden" name="action" value="edit_user_data">
+              <input type="hidden" name="user_id" id="modalUserId">
+              
+              <label>Nombre de Usuario (Login):</label>
+              <input type="text" name="username" id="modalUserName" required>
+              
+              <label>Email:</label>
+              <input type="email" name="email" id="modalUserEmail" required>
+              
+              <button type="submit" class="btn-orange" style="width:100%;">Actualizar Datos</button>
+          </form>
+      </div>
+  </div>
+
+  <script>
+      // BUSCADOR EN TIEMPO REAL
+      function filterTable() {
+          var input, filter, table, tr, td, i, txtValue;
+          input = document.getElementById("searchInput");
+          filter = input.value.toUpperCase();
+          table = document.getElementById("usersTable");
+          tr = table.getElementsByTagName("tr");
+
+          for (i = 1; i < tr.length; i++) { // Empezamos en 1 para saltar cabecera
+              // Buscamos en Nombre (col 0) y Solicitud (col 1)
+              var tdName = tr[i].getElementsByTagName("td")[0]; 
+              var tdReq = tr[i].getElementsByTagName("td")[1];
+              
+              if (tdName || tdReq) {
+                  var txtName = tdName.textContent || tdName.innerText;
+                  var txtReq = tdReq.textContent || tdReq.innerText;
+                  
+                  if (txtName.toUpperCase().indexOf(filter) > -1 || txtReq.toUpperCase().indexOf(filter) > -1) {
+                      tr[i].style.display = "";
+                  } else {
+                      tr[i].style.display = "none";
+                  }
+              }       
+          }
+      }
+
+      // FUNCIONES MODALES
+      function openTeamModal(id, name) {
+          document.getElementById('modalTeamId').value = id;
+          document.getElementById('modalTeamName').value = name;
+          document.getElementById('teamModal').style.display = 'flex';
+      }
+
+      function openUserModal(id, username, email) {
+          document.getElementById('modalUserId').value = id;
+          document.getElementById('modalUserName').value = username;
+          document.getElementById('modalUserEmail').value = email;
+          document.getElementById('userModal').style.display = 'flex';
+      }
+
+      function closeModal(id) {
+          document.getElementById(id).style.display = 'none';
+      }
+
+      // Cerrar al hacer clic fuera
+      window.onclick = function(event) {
+          if (event.target.classList.contains('modal-overlay')) {
+              event.target.style.display = 'none';
+          }
+      }
+  </script>
+
+</body>
+</html>
