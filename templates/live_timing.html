@@ -6,6 +6,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   
   <meta http-equiv="Content-Security-Policy" content="default-src * 'self' 'unsafe-inline' 'unsafe-eval' data: gap: content: blob:;">
+  <!-- Nota: la página usa carga de scripts desde /static; evitar scripts inline para respetar CSP. -->
 
   <link href="https://fonts.googleapis.com/css2?family=Teko:wght@300;400;600;700&family=Roboto+Mono:wght@400;500;700&display=swap" rel="stylesheet">
   <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
@@ -81,6 +82,7 @@
     .map-dot.is-me { background: var(--neon-green); border: 2px solid white; width: 30px; height: 30px; top: -13px; z-index: 10; }
     .map-dot.is-me img { width: 100%; height: 100%; object-fit: cover; }
   </style>
+<link rel="stylesheet" href="{{ url_for('static', filename='css/live_timing_runtime.css') }}">
 </head>
 <body>
 
@@ -88,14 +90,16 @@
     <div style="flex:1"><a href="#" class="btn-nav">VOLVER</a></div>
     <div style="font-family:'Teko'; font-size:3rem; color:white; letter-spacing:2px;">LEGACY <span style="color:#ccff00">PITWALL</span></div>
     <div style="flex:1; display:flex; justify-content:flex-end; gap:20px; align-items:center;">
-        <button class="btn-load">CARGAR ESTRATEGIA</button>
+        <button class="btn-load" id="btnLoadStrat">CARGAR ESTRATEGIA</button>
         <div class="status-box"><div id="statusDot" class="status-dot"></div><span id="statusText">DESCONECTADO</span></div>
     </div>
 </header>
 
 <div class="session-bar">
+    <div>TRACK: <span class="session-val" id="trackNameBadge">--</span></div>
+    <div>SESSION: <span class="session-val" id="sessionTypeBadge">--</span></div>
     <div>AIR: <span class="session-val" id="weatherAir">--°C</span></div>
-    <div>TRACK: <span class="session-val" id="weatherTrack">--°C</span></div>
+    <div>PISTA: <span class="session-val" id="weatherTrack">--°C</span></div>
     <div>RAIN: <span class="session-val" id="weatherRain">--%</span></div>
     <div>STATUS: <span class="session-val" id="weatherStatus">--</span></div>
 </div>
@@ -146,149 +150,10 @@
 
 <div class="track-map-container"><div class="track-line" id="trackMapLine"></div></div>
 
-<script>
-    const SIM_DRIVER_ID = 668063; 
-    let connectedPilots = ["Manolo Segovia", "Pepe Lopez"]; 
-    let lastUserScroll = 0;
-    document.getElementById('gridContainer').addEventListener('scroll', () => { lastUserScroll = Date.now(); });
-
-    // --- ESTRATEGIA ---
-    function renderStrategyTable() {
-        const tbody = document.getElementById('strategyBody');
-        tbody.innerHTML = '';
-        const activeIdx = 6; 
-        const drivers = ["Manolo Segovia", "Pepe Lopez", "Juan Martinez", "Valentino Rossi"];
-
-        for(let i=1; i<=15; i++) {
-            if (i < activeIdx - 4) continue;
-            let name = drivers[(i-1)%4];
-            let isConn = connectedPilots.includes(name);
-            let connClass = isConn ? 'pilot-on' : 'pilot-off';
-            let status = "";
-            let wxIcon = "sun";
-            let note = "OK";
-
-            if (i < activeIdx) { status = "stint-done"; } 
-            else if (i === activeIdx) { status = "stint-active"; note = "PUSHING"; } 
-            else if (i === 15) { status = "stint-storm"; wxIcon = "bolt"; note = "STORM"; }
-
-            let pilotDisplay = (i === activeIdx) ? 'TU (NOW)' : name;
-
-            tbody.innerHTML += `<tr class="${status}">
-                <td style="font-weight:bold">${i}</td>
-                <td class="col-pilot ${connClass}" style="text-align:left;">${pilotDisplay}</td>
-                <td>12:00</td><td>12:45</td>
-                <td style="color:var(--color-blue)">28</td>
-                <td style="color:var(--color-orange)">55</td>
-                <td><i class="fas fa-${wxIcon}"></i></td>
-                <td>01:05</td>
-                <td style="color:#aaa">${note}</td>
-            </tr>`;
-        }
-    }
-
-    // --- LIVE TIMING ---
-    function renderGrid(data) {
-        const tbody = document.getElementById('gridBody');
-        tbody.innerHTML = '';
-        const classesPresent = [...new Set(data.map(d => d.c_name))].sort();
-        if(classesPresent.length === 0) classesPresent.push("GT3"); 
-
-        classesPresent.forEach(cls => {
-            tbody.innerHTML += `<tr class="class-separator"><td colspan="11" style="color:#ccff00; border-left:5px solid #ccff00; text-align:left; padding-left:15px">${cls} CLASS</td></tr>`;
-            
-            const drivers = data.filter(c => c.c_name === cls);
-            drivers.forEach((c, index) => {
-                const isMe = c.is_me ? 'row-hero' : '';
-                const picValue = index + 1;
-                let podiumClass = (picValue === 1) ? "pic-p1" : (picValue === 2) ? "pic-p2" : (picValue === 3) ? "pic-p3" : "";
-                
-                let stratBadge = `<span class="st-equal">EQUAL</span>`;
-                if(c.strat_cls === "lead") stratBadge = `<span class="strat-badge st-lead">${c.strat_txt}</span>`;
-                if(c.strat_cls === "lag") stratBadge = `<span class="strat-badge st-lag">${c.strat_txt}</span>`;
-
-                const carLogo = c.car_logo || "iracing";
-                let lastLapClass = 'style="color:var(--neon-green)"'; 
-                if (c.last_lap === "PIT") { lastLapClass = 'class="state-pit"'; } 
-                else if (c.last_lap === "OUT") { lastLapClass = 'class="state-out"'; }
-
-                tbody.innerHTML += `<tr class="${isMe}" id="${c.is_me ? 'myRow' : ''}">
-                    <td style="color:#666">${c.pos}</td>
-                    <td><span class="pic-badge ${podiumClass}">P${picValue}</span></td>
-                    <td><div class="name-grid">
-                        <img src="https://cdn.simpleicons.org/${carLogo}/white" style="width:16px; opacity:0.7">
-                        <div class="cell-num">#${c.num}</div>
-                        <span class="fi fi-${c.flag}"></span>
-                        <div class="cell-name">${c.name}</div>
-                    </div></td>
-                    <td ${lastLapClass}>${c.last_lap}</td>
-                    <td>${c.best_lap}</td>
-                    <td style="color:var(--neon-green)">${c.gap}</td>
-                    <td style="color:#aaa">${c.int}</td>
-                    <td>${stratBadge}</td>
-                    <td style="color:var(--color-orange)">${c.s1}</td>
-                    <td style="color:#666">${c.s2}</td>
-                    <td style="color:#444">${c.s3}</td>
-                </tr>`;
-            });
-        });
-
-        if (Date.now() - lastUserScroll > 10000) {
-            const myRow = document.getElementById('myRow');
-            if(myRow) myRow.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        }
-    }
-
-    function renderMap(grid) {
-        const container = document.getElementById('trackMapLine');
-        container.innerHTML = '';
-        grid.forEach(car => {
-            const dot = document.createElement('div');
-            dot.className = 'map-dot';
-            dot.style.left = (car.pct * 100) + '%';
-            if (car.is_me) {
-                dot.classList.add('is-me');
-                dot.innerHTML = `<img src="/static/drivers/${SIM_DRIVER_ID}.jpg" onerror="this.style.background='var(--neon-green)'">`; 
-            } else { dot.innerText = car.pos; }
-            container.appendChild(dot);
-        });
-    }
-
-    async function update() {
-        try {
-            const res = await fetch('/api/telemetry/live');
-            const data = await res.json();
-            
-            if (data.connected) {
-                document.getElementById('statusText').innerText = "LIVE DATA";
-                document.getElementById('statusText').style.color = "var(--neon-green)";
-                document.getElementById('statusDot').className = "status-dot online";
-                
-                document.getElementById('hudTime').innerText = data.session_timer || "--:--:--";
-                document.getElementById('hudFuel').innerText = parseFloat(data.my_car.fuel).toFixed(1);
-                document.getElementById('hudTarget').innerText = data.my_car.strat || "OK";
-                document.getElementById('hudInc').innerText = `${data.my_car.incidents}/${data.my_car.inc_limit || 'x'}`;
-                
-                document.getElementById('weatherAir').innerText = data.weather.air + "°C";
-                document.getElementById('weatherTrack').innerText = data.weather.track + "°C";
-                document.getElementById('weatherRain').innerText = data.weather.rain + "%";
-                document.getElementById('weatherStatus').innerText = data.weather.status;
-                
-                if(data.grid && data.grid.length > 0) {
-                    renderGrid(data.grid);
-                    renderMap(data.grid);
-                }
-            } else {
-                document.getElementById('statusText').innerText = "ESPERANDO BRIDGE...";
-                document.getElementById('statusText').style.color = "#666";
-                document.getElementById('statusDot').className = "status-dot";
-            }
-        } catch (e) { console.log("Conectando..."); }
-    }
-
-    renderStrategyTable();
-    setInterval(update, 500); 
-    function openStratModal() { alert("¡Módulo de carga listo!"); }
-</script>
+<!-- NOTA: no incluir scripts inline por CSP. Todas las funciones JS están en archivos externos. -->
+<!-- runtime existente (si ya lo tienes) -->
+<script src="/static/js/live_timing_runtime.js"></script>
+<!-- nuestro updater/renderer robusto (mueve aquí las funciones que antes estaban inline) -->
+<script src="/static/js/live_timing_custom.js"></script>
 </body>
 </html>
